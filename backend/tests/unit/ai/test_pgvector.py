@@ -176,3 +176,29 @@ def test_ingest_main(monkeypatch, capsys):
 
 def test_embeddings_module_constants():
     assert embeddings.EMBEDDING_DIM == 384
+
+
+def test_thresholds_are_per_retriever():
+    mem = AISettings(retriever="memory")
+    pg = AISettings(retriever="pgvector")
+    assert mem.retrieval_min_score == 0.35 and pg.retrieval_min_score == 0.5
+    assert AISettings.from_env({}).retrieval_min_score_pgvector == 0.5
+
+
+def test_thresholds_from_env_and_override():
+    env = {"RETRIEVAL_MIN_SCORE_MEMORY": "0.4", "RETRIEVAL_MIN_SCORE_PGVECTOR": "0.55"}
+    assert AISettings.from_env({**env, "RETRIEVER": "memory"}).retrieval_min_score == 0.4
+    assert AISettings.from_env({**env, "RETRIEVER": "pgvector"}).retrieval_min_score == 0.55
+    for r in ("memory", "pgvector"):  # plain RETRIEVAL_MIN_SCORE beats both
+        s = AISettings.from_env({**env, "RETRIEVER": r, "RETRIEVAL_MIN_SCORE": "0.7"})
+        assert s.retrieval_min_score == 0.7
+    assert AISettings.from_env({"RETRIEVAL_MIN_SCORE": ""}).retrieval_min_score_override is None
+
+
+def test_get_retriever_uses_pgvector_threshold():
+    s = AISettings(retriever="pgvector", database_url="postgresql://x")
+    assert get_retriever(s).min_score == 0.5
+    s = AISettings(
+        retriever="pgvector", database_url="postgresql://x", retrieval_min_score_override=0.7
+    )
+    assert get_retriever(s).min_score == 0.7
