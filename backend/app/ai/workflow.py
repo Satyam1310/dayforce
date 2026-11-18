@@ -6,6 +6,7 @@ TODO(Harsh): LangGraph version of the same flow.
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -30,11 +31,10 @@ from app.contracts import (
 from .llm import LLM, LLMError, build_llm
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPT, build_user_prompt, parse_llm_output
 from .retrieval import InMemoryRetriever, Retriever, build_query
-from .settings import AISettings
+from .settings import FALLBACK_CONFIDENCE, AISettings
 
 Validator = Callable[[Timecard, DetectedException, Fix, PolicyConfig], ValidationResult]
 
-FALLBACK_CONFIDENCE = 0.75  # rule-based fixes are deterministic but not certain; fixed value
 TOP_K = 3
 
 
@@ -58,6 +58,7 @@ def run_workflow(
     validator: Validator,
     cfg: PolicyConfig,
     settings: AISettings | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> tuple[Proposal, list[AuditEvent]]:
     s = settings or AISettings.from_env()
     events: list[AuditEvent] = []
@@ -171,30 +172,32 @@ def run_workflow(
         )
         return p, events
 
-    # 2-4. LLM propose -> parse -> citation check -> validate, with one retry per failure kind
-    schema_retries = 1
-    validation_retries = 1
+    # 2-4. LLM propose -> parse -> citation check -> validate.
+    # ONE shared budget: at most s.max_llm_calls calls and s.total_deadline_seconds overall,
+    # whatever the failure cause. When it runs out we fall back to the baseline fix.
+    start = clock()
     violations: list[Violation] | None = None
     feedback: str | None = None
-    attempt = 0
-    while True:
-        attempt += 1
+    failure = "no attempt made"
+    for attempt in range(1, s.max_llm_calls + 1):
+        remaining = s.total_deadline_seconds - (clock() - start)
+        if remaining <= 0:
+            audit("DEADLINE_EXCEEDED", attempt=attempt, deadline=s.total_deadline_seconds)
+            return fallback("time limit reached")
         prompt = build_user_prompt(exc, timecard, relevant, violations, feedback)
+        violations, feedback = None, None
         try:
-            raw = llm.complete(SYSTEM_PROMPT, prompt)
+            raw = llm.complete(SYSTEM_PROMPT, prompt, timeout=remaining)
         except LLMError as e:
             audit("LLM_ERROR", actor="llm", attempt=attempt, error=type(e).__name__)
             return fallback("LLM unavailable")
         audit("LLM_CALLED", actor="llm", attempt=attempt, model=llm.model_name)
-        violations, feedback = None, None
 
         try:
             out = parse_llm_output(raw)
         except (ValidationError, ValueError) as e:
             audit("LLM_INVALID_OUTPUT", actor="llm", attempt=attempt, error=type(e).__name__)
-            if schema_retries == 0:
-                return fallback("LLM output invalid")
-            schema_retries -= 1
+            failure = "LLM output invalid"
             feedback = (
                 "Your previous reply was not valid JSON for the schema. Reply with JSON only."
             )
@@ -209,9 +212,7 @@ def run_workflow(
                 invented=invented,
                 cited=out.cited_clause_ids,
             )
-            if schema_retries == 0:
-                return fallback("LLM citations not grounded in retrieved policy")
-            schema_retries -= 1
+            failure = "LLM citations not grounded in retrieved policy"
             feedback = (
                 "Cite at least one clause id, and only ids from <policy_clauses>: "
                 + ", ".join(allowed)
@@ -226,9 +227,7 @@ def run_workflow(
             violations=[v.code for v in validation.violations],
         )
         if not validation.passed:
-            if validation_retries == 0:
-                return fallback("LLM fix failed validation")
-            validation_retries -= 1
+            failure = "LLM fix failed validation"
             violations = validation.violations
             continue
 
@@ -242,6 +241,9 @@ def run_workflow(
             llm.model_name,
             validation,
         )
+
+    audit("RETRY_BUDGET_EXHAUSTED", max_llm_calls=s.max_llm_calls)
+    return fallback(failure)
 
 
 def generate_proposal(exc: DetectedException, timecard: Timecard) -> Proposal:

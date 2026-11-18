@@ -24,8 +24,11 @@ class LLMTimeout(LLMError):
 class LLM(Protocol):
     model_name: str
 
-    def complete(self, system: str, user: str) -> str:
-        """Return the raw model text (expected to be a JSON object)."""
+    def complete(self, system: str, user: str, timeout: float | None = None) -> str:
+        """Return the raw model text (expected to be a JSON object).
+
+        `timeout` caps this call (the effective limit is the smaller of it and the client's own).
+        """
         ...
 
 
@@ -40,7 +43,8 @@ class OpenAICompatibleLLM:
         self.api_key = api_key
         self.timeout = timeout
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> str:
+        limit = self.timeout if timeout is None else min(self.timeout, timeout)
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -58,7 +62,7 @@ class OpenAICompatibleLLM:
                 f"{self.base_url}/chat/completions",
                 json=body,
                 headers=headers,
-                timeout=self.timeout,
+                timeout=limit,
             )
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"]
@@ -83,7 +87,7 @@ class MockLLM:
         self.model_name = model_name
         self.calls = 0
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> str:
         self.calls += 1
         if self.mode == "timeout":
             raise LLMTimeout("mock timeout")
