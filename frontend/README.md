@@ -1,75 +1,59 @@
-# React + TypeScript + Vite
+# Frontend: manager screens
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 18 + TypeScript + Vite + React Router, plain `fetch`, plain CSS. Owner: Priyanshu.
 
-Currently, two official plugins are available:
+## Run
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+npm test           # Vitest + React Testing Library
+npm run lint
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Mock vs real backend
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+By default the app uses an in-browser mock API (`src/mocks/`), so it works without the backend.
+A "Mock data" badge shows in the top bar.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+To use the real FastAPI backend on port 8000, create `frontend/.env.local`:
 
 ```
+VITE_USE_MOCK=false
+```
+
+and restart `npm run dev`. Vite proxies `/api` to `http://localhost:8000`.
+
+## Screens
+
+| Route | What it shows |
+|---|---|
+| `/exceptions` | All exceptions, filter by type and status, severity badge, escalated rows marked |
+| `/exceptions/:id` | Evidence, timecard timeline (shifts vs punches, proposed punch dashed), proposed fix before/after, rationale, cited policy clause, validator result, AI / rule-based badge, Approve / Reject with comment, history |
+| `/audit` | Audit trail, filter by entity ID |
+
+## Code map
+
+```
+src/
+  types/api.ts        TS copies of backend/app/contracts/models.py
+  api/                Api interface, real fetch client (http.ts), picks mock or real (index.ts)
+  mocks/              seed data (built from contracts/fixtures) + in-memory mock API
+  pages/              ExceptionsList, ExceptionDetail, AuditLog
+  components/         Timeline, FixDiff, CitationList, ValidationPanel, DecisionForm, badges, states
+  lib/                IST formatting helpers, policy clause text
+  hooks/useAsync.ts   loading / error / data for API calls
+```
+
+## Safety details in the UI
+
+- The manager is the only one who can apply a fix (Approve). Rejecting requires a comment.
+- Escalated cases show "AI couldn't safely propose a fix, manager review needed." and no Approve button.
+- Timecard `notes` are untrusted and rendered as plain text with a label saying so.
+- All times are shown in Asia/Kolkata, whatever the browser's timezone.
+
+## Open question for the backend
+
+`GET /exceptions/{id}` is assumed to return `{ exception, timecard, proposal }` (see `ExceptionDetail` in `src/types/api.ts`). Confirm the shape with Raman.
