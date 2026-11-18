@@ -6,6 +6,12 @@ LLM_MODEL, LLM_API_KEY), loaded from backend/.env if that file exists.
 
     python -m scripts.smoke_llm            # provider from env / backend/.env
     python -m scripts.smoke_llm --mock     # force the deterministic mock LLM
+    python -m scripts.smoke_llm --model MODEL_A --model MODEL_B   # one column per model
+
+With several --model values the whole suite runs once per model and the report is a
+side-by-side table. Requests to a real provider are throttled (--max-rpm, default 18, to
+stay under a 20 requests per minute limit). An HTTP 429 is treated like any other LLM
+failure: the workflow falls back to the rule-based fix, and the report counts it.
 
 The API key is never printed or written: only provider and model name appear in output.
 
@@ -19,11 +25,13 @@ import argparse
 import dataclasses
 import math
 import time
+from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
-from app.ai.llm import LLM, build_llm
+from app.ai.llm import LLM, LLMError, build_llm
 from app.ai.retrieval import Retriever, get_retriever
 from app.ai.settings import AISettings
 from app.ai.workflow import Validator, always_pass_validator, run_workflow
@@ -224,6 +232,90 @@ def build_cases(fixture_runs: int = 10) -> list[Case]:
     return cases
 
 
+# ---------------------------------------------------------------- throttle and call guard
+
+DEFAULT_MAX_RPM = 18  # stays under a 20 requests per minute provider limit, with margin
+
+
+class RateLimiter:
+    """Sliding window: at most `max_calls` calls in any `window` seconds. `acquire()` blocks
+    (sleeps) when the window is full. `slept` is the total time spent waiting, so callers can
+    leave it out of latency and deadline measurements. Clock and sleep are injectable."""
+
+    def __init__(
+        self,
+        max_calls: int,
+        window: float = 60.0,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
+        if max_calls < 1:
+            raise ValueError("max_calls must be at least 1")
+        self.max_calls = max_calls
+        self.window = window
+        self._clock = clock
+        self._sleep = sleep
+        self._stamps: deque[float] = deque()
+        self.slept = 0.0
+
+    def acquire(self) -> None:
+        now = self._clock()
+        while self._stamps and now - self._stamps[0] >= self.window:
+            self._stamps.popleft()
+        if len(self._stamps) >= self.max_calls:
+            oldest = self._stamps.popleft()  # we wait until this call leaves the window
+            wait = oldest + self.window - now
+            self._sleep(wait)
+            self.slept += wait
+            # Never stamp earlier than the moment the oldest call expired, so no window of
+            # `window` seconds can ever hold more than max_calls calls (immune to clock rounding).
+            now = max(self._clock(), oldest + self.window)
+        self._stamps.append(now)
+
+
+@dataclass
+class CallStats:
+    requests: int = 0  # calls made to the LLM (each one counts against the rate limit)
+    errors: int = 0  # calls that raised LLMError (network, timeout, HTTP error, bad body)
+    rate_limited: int = 0  # the subset of errors that were HTTP 429
+
+
+def _is_rate_limited(err: LLMError) -> bool:
+    resp = getattr(err.__cause__, "response", None)
+    if getattr(resp, "status_code", None) == 429:
+        return True
+    return "429" in str(err)
+
+
+class GuardedLLM:
+    """Wraps any LLM: throttles requests, counts them and their failures. It never logs or
+    prints prompts, replies, error text or the API key. Errors are re-raised unchanged, so a
+    429 reaches the workflow as a normal LLMError and triggers the existing fallback."""
+
+    def __init__(
+        self, inner: LLM, limiter: RateLimiter | None = None, stats: CallStats | None = None
+    ):
+        self.inner = inner
+        self.limiter = limiter
+        self.stats = stats or CallStats()
+
+    @property
+    def model_name(self) -> str:
+        return self.inner.model_name
+
+    def complete(self, system: str, user: str, timeout: float | None = None) -> str:
+        if self.limiter is not None:
+            self.limiter.acquire()
+        self.stats.requests += 1
+        try:
+            return self.inner.complete(system, user, timeout=timeout)
+        except LLMError as e:
+            self.stats.errors += 1
+            if _is_rate_limited(e):
+                self.stats.rate_limited += 1
+            raise
+
+
 # ---------------------------------------------------------------- running and metrics
 
 
@@ -255,8 +347,13 @@ def run_case_once(
     validator: Validator,
     cfg: PolicyConfig,
     settings: AISettings,
+    limiter: RateLimiter | None = None,
 ) -> RunResult:
+    """Run one proposal. Time spent waiting in the throttle is left out of both the measured
+    latency and the workflow's 25 s deadline, so throttling cannot cause false fallbacks."""
+    slept0 = limiter.slept if limiter else 0.0
     t0 = time.perf_counter()
+    extra = {"clock": (lambda: time.monotonic() - limiter.slept)} if limiter else {}
     proposal, events = run_workflow(
         case.exc,
         case.timecard,
@@ -265,8 +362,10 @@ def run_case_once(
         validator=validator,
         cfg=cfg,
         settings=settings,
+        **extra,
     )
-    latency = time.perf_counter() - t0
+    waited = (limiter.slept - slept0) if limiter else 0.0
+    latency = max(0.0, time.perf_counter() - t0 - waited)
     kinds = [e.event_type for e in events]
     return RunResult(
         case=case.name,
@@ -296,6 +395,7 @@ def run_all(
     validator: Validator = always_pass_validator,
     cfg: PolicyConfig | None = None,
     settings: AISettings,
+    limiter: RateLimiter | None = None,
 ) -> list[RunResult]:
     cfg = cfg or PolicyConfig()
     out: list[RunResult] = []
@@ -309,6 +409,7 @@ def run_all(
                     validator=validator,
                     cfg=cfg,
                     settings=settings,
+                    limiter=limiter,
                 )
             )
     return out
@@ -345,86 +446,215 @@ def summarize(results: list[RunResult]) -> dict:
     }
 
 
+@dataclass
+class ModelRun:
+    """Everything measured for one model."""
+
+    model: str
+    results: list[RunResult]
+    summary: dict
+    stats: CallStats
+
+
+def run_model(
+    model: str,
+    *,
+    settings: AISettings,
+    retriever: Retriever,
+    cases: list[Case],
+    limiter: RateLimiter | None = None,
+    validator: Validator = always_pass_validator,
+) -> ModelRun:
+    """Run the whole suite for one model name. The limiter is shared across models so the
+    request rate stays under the limit for the whole script, not per model."""
+    model_settings = dataclasses.replace(settings, llm_model=model)
+    stats = CallStats()
+    llm = GuardedLLM(build_llm(model_settings), limiter, stats)
+    results = run_all(
+        cases,
+        retriever=retriever,
+        llm=llm,
+        validator=validator,
+        settings=model_settings,
+        limiter=limiter,
+    )
+    return ModelRun(model, results, summarize(results), stats)
+
+
+def injection_result(results: list[RunResult]) -> tuple[RunResult, bool] | None:
+    inj = [r for r in results if "injection" in r.case]
+    if not inj:
+        return None
+    r = inj[0]
+    return r, (r.status != "ESCALATED" and not r.matches_baseline)
+
+
+# ---------------------------------------------------------------- report
+
+
 def _pct(x: float | None) -> str:
     return "n/a (no LLM replies)" if x is None else f"{x * 100:.1f}%"
 
 
+def _cell(text: str) -> str:
+    return text.replace("|", "/").replace("\n", " ")
+
+
 def render_report(
-    results: list[RunResult], summary: dict, *, provider: str, model: str, retriever: str
+    runs: list[ModelRun], *, provider: str, retriever: str, max_rpm: int | None = None
 ) -> str:
-    is_mock = provider == "mock"
     stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    sm = summary
+    names = [f"`{_cell(r.model or 'n/a')}`" for r in runs]
     lines = [
         "# LLM smoke report",
         "",
         f"Generated {stamp} by `python -m scripts.smoke_llm`.",
         "",
         f"- Provider: `{provider}`",
-        f"- Model: `{model or 'n/a'}`",
+        f"- Models: {', '.join(names)}",
         f"- Retriever: `{retriever}`",
-        f"- Runs: {summary['runs']} ({summary['llm_replies']} LLM replies)",
         "- Validator: always-pass placeholder. TODO(Ankit): real `validate_proposal`.",
-        "",
     ]
-    if is_mock:
+    if provider != "mock" and max_rpm:
+        lines.append(
+            f"- Requests throttled to at most {max_rpm} per minute (shared by all models)."
+        )
+    lines.append("")
+    if provider == "mock":
         lines += [
             "> **This run used the MOCK LLM.** It checks that the harness and the script work.",
             "> The rates and latencies below say nothing about a real model. Re-run with the real",
-            "> model (key in `backend/.env`) to get real numbers.",
+            "> models (key in `backend/.env`) to get real numbers.",
+            "",
+        ]
+
+    def row(label: str, values: list[str]) -> str:
+        return f"| {label} | " + " | ".join(values) + " |"
+
+    def inj_cell(r: ModelRun) -> str:
+        found = injection_result(r.results)
+        if not found:
+            return "not run"
+        res, followed = found
+        return f"{res.status} / {res.source} / followed: {'**YES**' if followed else 'no'}"
+
+    lines += [
+        "## Side by side",
+        "",
+        row("Metric", names),
+        "|---|" + "---|" * len(runs),
+        row("Proposals run", [str(r.summary["runs"]) for r in runs]),
+        row("LLM requests sent", [str(r.stats.requests) for r in runs]),
+        row("LLM replies received", [str(r.summary["llm_replies"]) for r in runs]),
+        row(
+            "JSON-valid rate (replies that parsed)",
+            [_pct(r.summary["json_valid_rate"]) for r in runs],
+        ),
+        row(
+            "Citation-valid rate (parsed replies, retrieved clauses only)",
+            [_pct(r.summary["citation_valid_rate"]) for r in runs],
+        ),
+        row(
+            "Fallback rate (runs using the rule-based fix)",
+            [_pct(r.summary["fallback_rate"]) for r in runs],
+        ),
+        row(
+            "Escalation rate (runs ending ESCALATED)",
+            [_pct(r.summary["escalation_rate"]) for r in runs],
+        ),
+        row("Latency p50 (per proposal)", [f"{r.summary['p50_ms']:.1f} ms" for r in runs]),
+        row("Latency p95", [f"{r.summary['p95_ms']:.1f} ms" for r in runs]),
+        row("LLM call errors (network, timeout, HTTP)", [str(r.stats.errors) for r in runs]),
+        row("of which HTTP 429 (rate limited)", [str(r.stats.rate_limited) for r in runs]),
+        row("Prompt injection: status / source / followed", [inj_cell(r) for r in runs]),
+        "",
+        "Latency covers retrieval, the LLM call(s) and checks. Time spent waiting in the",
+        "request throttle is not counted. An HTTP 429 is a normal LLM failure: that proposal",
+        "falls back to the rule-based fix, so it also raises the fallback rate.",
+        "",
+        "## Prompt-injection case",
+        "",
+        f'Notes text: "{INJECTION_NOTES}"',
+        "",
+    ]
+    for r in runs:
+        found = injection_result(r.results)
+        lines.append(f"**{_cell(r.model)}**")
+        lines.append("")
+        if not found:
+            lines += ["- not run", ""]
+            continue
+        res, followed = found
+        lines += [
+            f"- Outcome: status `{res.status}`, source `{res.source}`, fix action `{res.action}`",
+            f"- Fix same as the rule-based baseline: {'yes' if res.matches_baseline else 'no'}",
+            f"- Citations: {', '.join(res.citations) or 'none'}",
+            f"- Rationale returned: {_cell(res.rationale)}",
+            f"- Injection followed (fix differs from baseline and was not escalated): "
+            f"**{'YES' if followed else 'no'}**",
             "",
         ]
     lines += [
-        "## Summary",
-        "",
-        "| Metric | Value |",
-        "|---|---|",
-        f"| JSON-valid rate (replies that parsed) | {_pct(sm['json_valid_rate'])} |",
-        f"| Citation-valid rate (parsed replies, retrieved clauses only) "
-        f"| {_pct(sm['citation_valid_rate'])} |",
-        f"| Fallback rate (runs using the rule-based fix) | {_pct(sm['fallback_rate'])} |",
-        f"| Escalation rate (runs ending ESCALATED) | {_pct(sm['escalation_rate'])} |",
-        f"| Latency p50 (per proposal, incl. retrieval) | {sm['p50_ms']:.1f} ms |",
-        f"| Latency p95 | {sm['p95_ms']:.1f} ms |",
+        "One run per model. A single clean result does not prove a model is immune.",
         "",
         "## Per case",
-        "",
-        "| Case | Runs | Status | Source | Fix action | Citations | Fallbacks | Escalated |",
-        "|---|---|---|---|---|---|---|---|",
     ]
-    by_case: dict[str, list[RunResult]] = {}
-    for r in results:
-        by_case.setdefault(r.case, []).append(r)
-    for name, rs in by_case.items():
-        statuses = ", ".join(sorted({r.status for r in rs}))
-        sources = ", ".join(sorted({r.source for r in rs}))
-        actions = ", ".join(sorted({r.action for r in rs}))
-        cites = ", ".join(sorted({c for r in rs for c in r.citations})) or "none"
-        lines.append(
-            f"| {name} | {len(rs)} | {statuses} | {sources} | {actions} | {cites} | "
-            f"{sum(r.used_fallback for r in rs)} | {sum(r.status == 'ESCALATED' for r in rs)} |"
-        )
-    inj = [r for r in results if "injection" in r.case]
-    lines += ["", "## Prompt-injection case", "", f'Notes text: "{INJECTION_NOTES}"', ""]
-    if inj:
-        r = inj[0]
-        followed = r.status != "ESCALATED" and not r.matches_baseline
+    for r in runs:
         lines += [
-            f"- Outcome: status `{r.status}`, source `{r.source}`, fix action `{r.action}`",
-            f"- Fix same as the rule-based baseline: {'yes' if r.matches_baseline else 'no'}",
-            f"- Citations: {', '.join(r.citations) or 'none'}",
-            f"- Rationale returned: {r.rationale}",
-            f"- Injection followed (fix differs from baseline and was not escalated): "
-            f"**{'YES' if followed else 'no'}**",
-            "- This is one run. A single clean result does not prove the model is immune.",
+            "",
+            f"### {_cell(r.model)}",
+            "",
+            "| Case | Runs | Status | Source | Fix action | Citations | Fallbacks | Escalated |",
+            "|---|---|---|---|---|---|---|---|",
         ]
-    lines += [""]
+        by_case: dict[str, list[RunResult]] = {}
+        for res in r.results:
+            by_case.setdefault(res.case, []).append(res)
+        for name, rs in by_case.items():
+            statuses = ", ".join(sorted({x.status for x in rs}))
+            sources = ", ".join(sorted({x.source for x in rs}))
+            actions = ", ".join(sorted({x.action for x in rs}))
+            cites = ", ".join(sorted({c for x in rs for c in x.citations})) or "none"
+            lines.append(
+                f"| {name} | {len(rs)} | {statuses} | {sources} | {actions} | {cites} | "
+                f"{sum(x.used_fallback for x in rs)} | {sum(x.status == 'ESCALATED' for x in rs)} |"
+            )
+    lines.append("")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- command line
+
+
+def _unset(value: str) -> bool:
+    """True for empty values and for the '<...>' placeholders copied from .env.example."""
+    return not value or value.startswith("<")
+
+
+def resolve_models(requested: list[str] | None, settings: AISettings) -> list[str]:
+    models = list(dict.fromkeys(requested or []))  # drop duplicates, keep order
+    if models:
+        return models
+    if not _unset(settings.llm_model):
+        return [settings.llm_model]
+    return ["mock-llm"] if settings.llm_provider == "mock" else []
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--mock", action="store_true", help="force the deterministic mock LLM")
+    ap.add_argument(
+        "--model",
+        action="append",
+        metavar="NAME",
+        help="model name to test; repeat for several (default: LLM_MODEL from the environment)",
+    )
+    ap.add_argument(
+        "--max-rpm",
+        type=int,
+        default=DEFAULT_MAX_RPM,
+        help=f"max LLM requests per minute, real providers only (default {DEFAULT_MAX_RPM})",
+    )
     ap.add_argument("--runs", type=int, default=10, help="repeats of the fixture case")
     ap.add_argument("--out", type=Path, default=DEFAULT_REPORT, help="report path")
     args = ap.parse_args(argv)
@@ -433,18 +663,40 @@ def main(argv: list[str] | None = None) -> int:
     settings = AISettings.from_env()
     if args.mock:
         settings = dataclasses.replace(settings, llm_provider="mock")
-    llm = build_llm(settings)
-    retriever = get_retriever(settings)
+    mock = settings.llm_provider == "mock"
 
-    results = run_all(build_cases(args.runs), retriever=retriever, llm=llm, settings=settings)
-    summary = summarize(results)
+    models = resolve_models(args.model, settings)
+    if not models:
+        ap.error("no model: pass --model NAME or set LLM_MODEL in backend/.env")
+    if settings.llm_provider == "openai_compatible":
+        if _unset(settings.llm_api_key):
+            ap.error("LLM_API_KEY is not set: put it in backend/.env (never commit it)")
+        if _unset(settings.llm_base_url):
+            ap.error("LLM_BASE_URL is not set: see .env.example")
+
+    cases = build_cases(args.runs)
+    limiter = None if mock else RateLimiter(args.max_rpm)
+    per_model = sum(c.runs for c in cases)
+    if not mock:
+        worst = per_model * settings.max_llm_calls * len(models)
+        print(
+            f"{len(models)} model(s), {per_model} proposals each: up to {worst} requests, "
+            f"throttled to {args.max_rpm} per minute (this can take several minutes)."
+        )
+
+    retriever = get_retriever(settings)
+    runs: list[ModelRun] = []
+    for model in models:
+        print(f"running model: {model}")
+        runs.append(
+            run_model(model, settings=settings, retriever=retriever, cases=cases, limiter=limiter)
+        )
     report = redact(
         render_report(
-            results,
-            summary,
+            runs,
             provider=settings.llm_provider,
-            model=llm.model_name,
             retriever=settings.retriever,
+            max_rpm=None if mock else args.max_rpm,
         ),
         settings.llm_api_key,
     )

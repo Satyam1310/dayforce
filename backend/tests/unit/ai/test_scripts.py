@@ -83,19 +83,15 @@ def test_percentile_nearest_rank():
 
 
 def test_report_marks_mock_and_has_sections():
-    results = run()
-    text = smoke_llm.render_report(
-        results, smoke_llm.summarize(results), provider="mock", model="mock-llm", retriever="memory"
+    mr = smoke_llm.run_model(
+        "mock-llm", settings=S, retriever=InMemoryRetriever(), cases=smoke_llm.build_cases(10)
     )
+    text = smoke_llm.render_report([mr], provider="mock", retriever="memory")
     assert "MOCK LLM" in text and "Prompt-injection case" in text and "p95" in text
     real = smoke_llm.render_report(
-        results,
-        smoke_llm.summarize(results),
-        provider="openai_compatible",
-        model="m",
-        retriever="memory",
+        [mr], provider="openai_compatible", retriever="memory", max_rpm=18
     )
-    assert "MOCK LLM" not in real
+    assert "MOCK LLM" not in real and "at most 18 per minute" in real
 
 
 def test_redact_hides_key():
@@ -110,7 +106,7 @@ def test_main_mock_writes_report_and_never_prints_key(tmp_path, monkeypatch, cap
     out = tmp_path / "report.md"
     assert smoke_llm.main(["--mock", "--runs", "3", "--out", str(out)]) == 0
     text = out.read_text()
-    assert "Provider: `mock`" in text and "Runs: 7" in text
+    assert "Provider: `mock`" in text and "| Proposals run | 7 |" in text
     assert "sk-super-secret-key" not in text + capsys.readouterr().out
 
 

@@ -25,6 +25,15 @@ _Diagram: TODO_
 ## Tech stack
 Python 3.11 + FastAPI + Pydantic · PostgreSQL + pgvector · React + TypeScript (Vite) · open-weight LLM via an OpenAI-compatible API · Docker · Kubernetes (Kustomize) · GitHub Actions CI/CD
 
+## LLM
+- **Provider:** Groq's free tier, through an OpenAI-compatible API (`LLM_PROVIDER=openai_compatible`, `LLM_BASE_URL=https://api.groq.com/openai/v1`).
+- **Model:** `openai/gpt-oss-20b` by default. `openai/gpt-oss-120b` also works: change `LLM_MODEL`, nothing else. The model name is a setting, never hard-coded.
+- **Licence:** Apache 2.0, as stated on the Hugging Face model card (`openai/gpt-oss-20b`).
+- **Key:** put `LLM_API_KEY` only in `backend/.env`, which is gitignored. `.env.example` leaves it blank. Never commit it.
+- **Rate limit:** the free tier allows 8,000 tokens per minute. If we hit a limit, the API answers HTTP 429. By design this is treated like any other LLM failure: the system falls back to the rule-based fix instead of failing, and the case is still reviewed by a manager.
+- **Other providers:** `LLM_PROVIDER=ollama` runs a local model offline, and `LLM_PROVIDER=mock` is a fake LLM for tests and CI.
+- **Smoke test:** `python -m scripts.smoke_llm --model openai/gpt-oss-20b --model openai/gpt-oss-120b` compares models side by side. The latest run is in [docs/llm_smoke_report.md](docs/llm_smoke_report.md).
+
 ## Team
 | Person | Role |
 |---|---|
