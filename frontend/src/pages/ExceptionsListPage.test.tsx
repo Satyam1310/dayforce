@@ -7,8 +7,8 @@ describe('Exceptions list', () => {
   it('lists all exceptions from the mock API', async () => {
     renderApp('/exceptions')
     const table = await screen.findByRole('table')
-    // 7 seed exceptions + 1 header row
-    expect(within(table).getAllByRole('row')).toHaveLength(8)
+    // 8 seed exceptions + 1 header row
+    expect(within(table).getAllByRole('row')).toHaveLength(9)
     expect(screen.getByText(/awaiting review/i)).toBeInTheDocument()
   })
 

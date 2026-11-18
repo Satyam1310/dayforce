@@ -114,6 +114,20 @@ const timecards: Timecard[] = [
     shifts: [],
     notes: 'Covering for a colleague today.',
   },
+  // 8. Missing break, but the employee says no break was taken: the manager rejected the deduction.
+  {
+    id: tc(8),
+    employee_id: emp(8),
+    work_date: '2026-03-12',
+    punches: [
+      { id: punch('15'), employee_id: emp(8), type: 'IN', timestamp: '2026-03-12T03:30:00+00:00' },
+      { id: punch('16'), employee_id: emp(8), type: 'OUT', timestamp: '2026-03-12T12:00:00+00:00' },
+    ],
+    shifts: [
+      { id: shift('81'), employee_id: emp(8), start: '2026-03-12T03:30:00+00:00', end: '2026-03-12T12:00:00+00:00', location_id: 'loc-pune-02' },
+    ],
+    notes: 'No break taken today, the store was short-staffed.',
+  },
   // 7. Already resolved missed punch (OUT punch was added on approval).
   {
     id: tc(7),
@@ -268,6 +282,27 @@ const exceptions: DetectedException[] = [
     },
     status: 'RESOLVED',
   },
+  {
+    id: exc(8),
+    type: 'POLICY_BREACH',
+    severity: 'MEDIUM',
+    employee_id: emp(8),
+    timecard_id: tc(8),
+    work_date: '2026-03-12',
+    evidence: {
+      rule: 'MISSING_BREAK',
+      worked_hours: 8.5,
+      break_minutes_logged: 0,
+      required_break_minutes: 30,
+    },
+    policy_refs: ['POL-TA-02'],
+    baseline_fix: {
+      action: 'DEDUCT_BREAK',
+      changes: [{ target_id: tc(8), field: 'break_minutes', old: '0', new: '30' }],
+    },
+    // A rejected fix sends the exception back to OPEN (same guess as docs/frontend-mock, TODO Raman).
+    status: 'OPEN',
+  },
 ]
 
 const proposals: Proposal[] = [
@@ -403,6 +438,29 @@ const proposals: Proposal[] = [
     validation: { passed: true, violations: [] },
     status: 'APPROVED',
   },
+  {
+    id: prop(8),
+    exception_id: exc(8),
+    fix: {
+      action: 'DEDUCT_BREAK',
+      changes: [{ target_id: tc(8), field: 'break_minutes', old: '0', new: '30' }],
+    },
+    rationale:
+      'An 8.5 hour shift has no break logged. Policy requires a 30 minute unpaid break, so 30 minutes are deducted.',
+    citations: [
+      {
+        clause_id: 'POL-TA-02',
+        quote: 'If no break is logged, deduct 30 minutes from the shift',
+        score: 0.8,
+      },
+    ],
+    confidence: 0.81,
+    source: 'LLM',
+    model: 'example-open-weight-model',
+    prompt_version: 'v1',
+    validation: { passed: true, violations: [] },
+    status: 'REJECTED',
+  },
 ]
 
 const decisions: Decision[] = [
@@ -413,6 +471,14 @@ const decisions: Decision[] = [
     manager_id: 'mgr-0001',
     comment: 'Confirmed with the employee, they left at 18:00.',
     decided_at: '2026-03-11T04:15:00+00:00',
+  },
+  {
+    id: '77777777-7777-4777-8777-000000000002',
+    proposal_id: prop(8),
+    decision: 'REJECT',
+    manager_id: 'mgr-0001',
+    comment: 'Employee confirmed no break was taken (store short-staffed). Pay the full shift.',
+    decided_at: '2026-03-13T14:05:00+00:00',
   },
 ]
 
@@ -433,6 +499,8 @@ function buildAudit(): AuditEvent[] {
   for (const e of exceptions.filter((x) => x.id !== exc(7))) {
     add({ ts: '2026-03-13T13:30:00+00:00', actor: 'system', event_type: 'EXCEPTION_DETECTED', entity_type: 'exception', entity_id: e.id, payload: { type: e.type, timecard_id: e.timecard_id } })
   }
+  add({ ts: '2026-03-13T14:05:00+00:00', actor: 'mgr-0001', event_type: 'DECISION_REJECTED', entity_type: 'proposal', entity_id: prop(8), payload: { decision_id: decisions[1].id, exception_id: exc(8), comment: decisions[1].comment } })
+
   for (const p of proposals.filter((x) => x.id !== prop(7))) {
     const escalated = p.status === 'ESCALATED'
     add({

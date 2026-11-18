@@ -51,7 +51,9 @@ export const mockApi: Api = {
     const timecard =
       db.timecards.find((t) => t.id === exception.timecard_id) ??
       notFound('Timecard', exception.timecard_id)
-    return clone({ exception, timecard, proposal: latestProposalFor(id) })
+    const proposal = latestProposalFor(id)
+    const decision = proposal ? (db.decisions.find((d) => d.proposal_id === proposal.id) ?? null) : null
+    return clone({ exception, timecard, proposal, decision })
   },
 
   // The real backend runs the LangGraph AI workflow here. The mock just uses
