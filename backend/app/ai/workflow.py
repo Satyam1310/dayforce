@@ -30,7 +30,7 @@ from app.contracts import (
 
 from .llm import LLM, LLMError, build_llm
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPT, build_user_prompt, parse_llm_output
-from .retrieval import InMemoryRetriever, Retriever, build_query
+from .retrieval import Retriever, build_query, get_retriever
 from .settings import FALLBACK_CONFIDENCE, AISettings
 
 Validator = Callable[[Timecard, DetectedException, Fix, PolicyConfig], ValidationResult]
@@ -252,7 +252,7 @@ def generate_proposal(exc: DetectedException, timecard: Timecard) -> Proposal:
     proposal, _events = run_workflow(
         exc,
         timecard,
-        retriever=InMemoryRetriever(),  # TODO(Harsh): pgvector retriever
+        retriever=get_retriever(s),
         llm=build_llm(s),
         validator=always_pass_validator,  # TODO: Ankit's validate_proposal
         cfg=PolicyConfig(),
