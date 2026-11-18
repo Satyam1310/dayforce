@@ -1,5 +1,6 @@
-"""fastembed wrapper. The model is loaded lazily on first use (it downloads ~130 MB once),
-so importing this module and memory-mode runs stay light."""
+"""fastembed wrapper. The model is loaded lazily on first use, so importing this module and
+memory-mode runs stay light. The first load downloads the model (about 64 MB measured on
+this machine) into fastembed's default cache, which is the system temp directory."""
 
 from __future__ import annotations
 
