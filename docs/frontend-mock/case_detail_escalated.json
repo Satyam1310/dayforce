@@ -1,0 +1,197 @@
+{
+  "timecard": {
+    "id": "cd31272e-8000-5190-8904-2724bd3e3dc7",
+    "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
+    "work_date": "2026-03-06",
+    "punches": [
+      {
+        "id": "870b0930-bd83-5c5e-a6fa-5ecd3c58cf02",
+        "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
+        "type": "IN",
+        "timestamp": "2026-03-06T02:30:00Z"
+      },
+      {
+        "id": "d89b9ad4-be14-5a21-88b3-477b13fb3c95",
+        "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
+        "type": "OUT",
+        "timestamp": "2026-03-06T16:00:00Z"
+      }
+    ],
+    "shifts": [
+      {
+        "id": "6b36e164-d465-5266-924e-24f5d521656d",
+        "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
+        "start": "2026-03-06T02:30:00Z",
+        "end": "2026-03-06T10:30:00Z",
+        "location_id": "loc-pune-01"
+      }
+    ],
+    "notes": "Stayed late to finish the stock count."
+  },
+  "exception": {
+    "id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+    "type": "POLICY_BREACH",
+    "severity": "HIGH",
+    "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
+    "timecard_id": "cd31272e-8000-5190-8904-2724bd3e3dc7",
+    "work_date": "2026-03-06",
+    "evidence": {
+      "worked_hours": 13.5,
+      "max_daily_hours": 12
+    },
+    "policy_refs": [
+      "POL-TA-03"
+    ],
+    "baseline_fix": null,
+    "status": "ESCALATED"
+  },
+  "proposal": {
+    "id": "6999deb1-5b0f-563b-9f74-b9c503abf6b1",
+    "exception_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+    "fix": {
+      "action": "FLAG_FOR_MANAGER",
+      "changes": []
+    },
+    "rationale": "AI could not safely propose a fix (LLM output invalid; no rule-based fix exists). Manager review needed.",
+    "citations": [],
+    "confidence": 0.0,
+    "source": "RULES_FALLBACK",
+    "model": null,
+    "prompt_version": "v1",
+    "validation": null,
+    "status": "ESCALATED"
+  },
+  "decision": null,
+  "audit_events": [
+    {
+      "id": "85782567-236b-56ee-9d5a-8690c6e55cae",
+      "ts": "2026-03-11T04:06:00Z",
+      "actor": "system",
+      "event_type": "WORKFLOW_STARTED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "exception_type": "POLICY_BREACH"
+      }
+    },
+    {
+      "id": "74716291-b4ff-54c3-aa66-802f2f019fa5",
+      "ts": "2026-03-11T04:06:01Z",
+      "actor": "system",
+      "event_type": "POLICY_RETRIEVED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "clauses": [
+          {
+            "clause_id": "POL-TA-03",
+            "score": 0.5294
+          },
+          {
+            "clause_id": "POL-TA-02",
+            "score": 0.4706
+          },
+          {
+            "clause_id": "POL-TA-06",
+            "score": 0.4118
+          }
+        ],
+        "min_score": 0.35
+      }
+    },
+    {
+      "id": "b85bdefb-1cb1-5493-9aba-d99d24eedb7e",
+      "ts": "2026-03-11T04:06:02Z",
+      "actor": "llm",
+      "event_type": "LLM_CALLED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "attempt": 1,
+        "model": "mock-llm"
+      }
+    },
+    {
+      "id": "a62f5bb3-7b95-5c43-a75c-ac5d3b78160e",
+      "ts": "2026-03-11T04:06:03Z",
+      "actor": "llm",
+      "event_type": "LLM_INVALID_OUTPUT",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "attempt": 1,
+        "error": "ValidationError"
+      }
+    },
+    {
+      "id": "ea2f196f-98b7-5d72-993b-e5a67232b6cc",
+      "ts": "2026-03-11T04:06:04Z",
+      "actor": "llm",
+      "event_type": "LLM_CALLED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "attempt": 2,
+        "model": "mock-llm"
+      }
+    },
+    {
+      "id": "21adf4ea-bd94-51f2-a757-3459b7d95a55",
+      "ts": "2026-03-11T04:06:05Z",
+      "actor": "llm",
+      "event_type": "LLM_INVALID_OUTPUT",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "attempt": 2,
+        "error": "ValidationError"
+      }
+    },
+    {
+      "id": "d634a540-fa63-5d16-bb34-70579fe8b422",
+      "ts": "2026-03-11T04:06:06Z",
+      "actor": "system",
+      "event_type": "RETRY_BUDGET_EXHAUSTED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "max_llm_calls": 2
+      }
+    },
+    {
+      "id": "a65b0447-4206-54cf-ae9f-12ba8521a8a5",
+      "ts": "2026-03-11T04:06:07Z",
+      "actor": "system",
+      "event_type": "FALLBACK_USED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "reason": "LLM output invalid"
+      }
+    },
+    {
+      "id": "569b52a1-9f97-553e-a821-f2628f0c23d7",
+      "ts": "2026-03-11T04:06:08Z",
+      "actor": "system",
+      "event_type": "ESCALATED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "reason": "NO_BASELINE_FIX"
+      }
+    },
+    {
+      "id": "cbfb6dc6-fafe-55d9-a34a-3a8d809313f2",
+      "ts": "2026-03-11T04:06:09Z",
+      "actor": "system",
+      "event_type": "PROPOSAL_CREATED",
+      "entity_type": "exception",
+      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "payload": {
+        "proposal_id": "6999deb1-5b0f-563b-9f74-b9c503abf6b1",
+        "status": "ESCALATED",
+        "source": "RULES_FALLBACK"
+      }
+    }
+  ]
+}

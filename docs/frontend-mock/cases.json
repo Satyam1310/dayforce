@@ -1,0 +1,465 @@
+[
+  {
+    "exception": {
+      "id": "55555555-5555-4555-8555-000000000001",
+      "type": "MISSED_PUNCH",
+      "severity": "MEDIUM",
+      "employee_id": "22222222-2222-4222-8222-000000000001",
+      "timecard_id": "11111111-1111-4111-8111-000000000001",
+      "work_date": "2026-03-10",
+      "evidence": {
+        "clock_in": "2026-03-10T03:32:00+00:00",
+        "clock_out": null,
+        "scheduled_shift_end": "2026-03-10T12:30:00+00:00",
+        "resulting_shift_hours": 8.97
+      },
+      "policy_refs": [
+        "POL-TA-01"
+      ],
+      "baseline_fix": {
+        "action": "ADD_PUNCH",
+        "changes": [
+          {
+            "target_id": "11111111-1111-4111-8111-000000000001",
+            "field": "punch.OUT",
+            "old": null,
+            "new": "2026-03-10T12:30:00+00:00"
+          }
+        ]
+      },
+      "status": "PROPOSED"
+    },
+    "proposal": {
+      "id": "52adaae0-46fe-57b9-a6b1-c36d08496a75",
+      "exception_id": "55555555-5555-4555-8555-000000000001",
+      "fix": {
+        "action": "ADD_PUNCH",
+        "changes": [
+          {
+            "target_id": "11111111-1111-4111-8111-000000000001",
+            "field": "punch.OUT",
+            "old": null,
+            "new": "2026-03-10T12:30:00+00:00"
+          }
+        ]
+      },
+      "rationale": "Applying POL-TA-01 to resolve the MISSED_PUNCH exception.",
+      "citations": [
+        {
+          "clause_id": "POL-TA-01",
+          "quote": "Missed punch. If an employee has a clock-in but no clock-out, the clock-out can be corrected to the scheduled shift end, as long as the resulting shift stays 12 hours or less. If there is no schedule for that day, the case is escalated to the manager.",
+          "score": 0.8
+        }
+      ],
+      "confidence": 0.9,
+      "source": "LLM",
+      "model": "mock-llm",
+      "prompt_version": "v1",
+      "validation": {
+        "passed": true,
+        "violations": []
+      },
+      "status": "PENDING_REVIEW"
+    }
+  },
+  {
+    "exception": {
+      "id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "type": "OVERTIME_RISK",
+      "severity": "MEDIUM",
+      "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
+      "timecard_id": "28611d62-3f56-57c8-9a5b-f73d337abfb8",
+      "work_date": "2026-03-12",
+      "evidence": {
+        "worked_hours": 31.5,
+        "remaining_scheduled_hours": 8.0,
+        "projected_hours": 39.5
+      },
+      "policy_refs": [
+        "POL-TA-04",
+        "POL-TA-03"
+      ],
+      "baseline_fix": {
+        "action": "REASSIGN_SHIFT",
+        "changes": [
+          {
+            "target_id": "c6c9a7ed-a097-5abe-aeb0-f1807862d4ec",
+            "field": "employee_id",
+            "old": "2375f0d7-292a-5ec2-857c-6787bd432753",
+            "new": null
+          }
+        ]
+      },
+      "status": "PROPOSED"
+    },
+    "proposal": {
+      "id": "0ef57d1a-0aef-52ae-ae83-42bf9c3f8827",
+      "exception_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "fix": {
+        "action": "REASSIGN_SHIFT",
+        "changes": [
+          {
+            "target_id": "c6c9a7ed-a097-5abe-aeb0-f1807862d4ec",
+            "field": "employee_id",
+            "old": "2375f0d7-292a-5ec2-857c-6787bd432753",
+            "new": null
+          }
+        ]
+      },
+      "rationale": "Rule-based fix used (LLM output invalid). Follows POL-TA-04, POL-TA-03.",
+      "citations": [
+        {
+          "clause_id": "POL-TA-04",
+          "quote": "Weekly overtime risk. Overtime applies beyond 40 hours per week. If worked hours plus remaining scheduled hours are projected at 38 hours or more, raise an overtime risk alert. The suggested action is to reduce or reassign upcoming shifts.",
+          "score": 0.9167
+        }
+      ],
+      "confidence": 0.75,
+      "source": "RULES_FALLBACK",
+      "model": null,
+      "prompt_version": "v1",
+      "validation": {
+        "passed": true,
+        "violations": []
+      },
+      "status": "PENDING_REVIEW"
+    }
+  },
+  {
+    "exception": {
+      "id": "392d4f2f-9c6b-5351-8c6d-28a4efd3b98c",
+      "type": "SCHEDULE_CONFLICT",
+      "severity": "HIGH",
+      "employee_id": "8c58ca56-ac51-503c-b318-366d3e8598ac",
+      "timecard_id": "4bbd664d-baea-570c-9423-aa591588e94f",
+      "work_date": "2026-03-13",
+      "evidence": {
+        "shift_a": "6684fab8-85f5-5e28-bee6-ecf6758babcd",
+        "shift_b": "90b419a5-a0b9-5f58-af5e-9fa3de119069",
+        "overlap_hours": 2.0
+      },
+      "policy_refs": [
+        "POL-TA-05"
+      ],
+      "baseline_fix": {
+        "action": "REASSIGN_SHIFT",
+        "changes": [
+          {
+            "target_id": "90b419a5-a0b9-5f58-af5e-9fa3de119069",
+            "field": "employee_id",
+            "old": "8c58ca56-ac51-503c-b318-366d3e8598ac",
+            "new": null
+          }
+        ]
+      },
+      "status": "PROPOSED"
+    },
+    "proposal": {
+      "id": "a9d072ad-c65d-5269-9279-3a993762144a",
+      "exception_id": "392d4f2f-9c6b-5351-8c6d-28a4efd3b98c",
+      "fix": {
+        "action": "REASSIGN_SHIFT",
+        "changes": [
+          {
+            "target_id": "90b419a5-a0b9-5f58-af5e-9fa3de119069",
+            "field": "employee_id",
+            "old": "8c58ca56-ac51-503c-b318-366d3e8598ac",
+            "new": null
+          }
+        ]
+      },
+      "rationale": "Applying POL-TA-05 to resolve the SCHEDULE_CONFLICT exception.",
+      "citations": [
+        {
+          "clause_id": "POL-TA-05",
+          "quote": "Schedule conflict. An employee cannot have two overlapping shifts. Resolution: keep the earliest-assigned shift and propose reassigning the other shift, with manager approval.",
+          "score": 0.8571
+        }
+      ],
+      "confidence": 0.9,
+      "source": "LLM",
+      "model": "mock-llm",
+      "prompt_version": "v1",
+      "validation": {
+        "passed": true,
+        "violations": []
+      },
+      "status": "PENDING_REVIEW"
+    }
+  },
+  {
+    "exception": {
+      "id": "5c9c4dab-8dbe-5960-b4d7-c45e931d2cea",
+      "type": "POLICY_BREACH",
+      "severity": "LOW",
+      "employee_id": "282003e8-5a23-55f0-8b04-7352a4fa7123",
+      "timecard_id": "fb047cb3-3f3b-5dab-98a8-160e7ff05ba7",
+      "work_date": "2026-03-09",
+      "evidence": {
+        "shift_hours": 8.5,
+        "break_minutes_logged": 0,
+        "rule": "meal break"
+      },
+      "policy_refs": [
+        "POL-TA-02"
+      ],
+      "baseline_fix": {
+        "action": "DEDUCT_BREAK",
+        "changes": [
+          {
+            "target_id": "fb047cb3-3f3b-5dab-98a8-160e7ff05ba7",
+            "field": "break_minutes",
+            "old": null,
+            "new": "30"
+          }
+        ]
+      },
+      "status": "RESOLVED"
+    },
+    "proposal": {
+      "id": "4c96a021-1111-5bfc-ad01-0be6fb302248",
+      "exception_id": "5c9c4dab-8dbe-5960-b4d7-c45e931d2cea",
+      "fix": {
+        "action": "DEDUCT_BREAK",
+        "changes": [
+          {
+            "target_id": "fb047cb3-3f3b-5dab-98a8-160e7ff05ba7",
+            "field": "break_minutes",
+            "old": null,
+            "new": "30"
+          }
+        ]
+      },
+      "rationale": "Applying POL-TA-02 to resolve the POLICY_BREACH exception.",
+      "citations": [
+        {
+          "clause_id": "POL-TA-02",
+          "quote": "Meal break. Shifts longer than 6 hours need an unpaid break of at least 30 minutes. If no break is logged, deduct 30 minutes from the shift, unless the employee states that no break was taken, in which case the manager decides.",
+          "score": 0.4706
+        }
+      ],
+      "confidence": 0.9,
+      "source": "LLM",
+      "model": "mock-llm",
+      "prompt_version": "v1",
+      "validation": {
+        "passed": true,
+        "violations": []
+      },
+      "status": "APPROVED"
+    }
+  },
+  {
+    "exception": {
+      "id": "2b56915b-4dd0-57e1-8fc5-b9a87ced2d09",
+      "type": "MISSED_PUNCH",
+      "severity": "MEDIUM",
+      "employee_id": "cc77b971-3fd0-5b1a-a1e1-54137b3e8850",
+      "timecard_id": "ef2f1745-6e3c-5a0b-903a-bc1a7c991c54",
+      "work_date": "2026-03-10",
+      "evidence": {
+        "clock_in": "2026-03-10T03:32:00+00:00",
+        "clock_out": null,
+        "scheduled_shift_end": "2026-03-10T12:30:00+00:00",
+        "resulting_shift_hours": 8.97
+      },
+      "policy_refs": [
+        "POL-TA-01"
+      ],
+      "baseline_fix": {
+        "action": "ADD_PUNCH",
+        "changes": [
+          {
+            "target_id": "ef2f1745-6e3c-5a0b-903a-bc1a7c991c54",
+            "field": "punch.OUT",
+            "old": null,
+            "new": "2026-03-10T12:30:00+00:00"
+          }
+        ]
+      },
+      "status": "RESOLVED"
+    },
+    "proposal": {
+      "id": "def1e84e-43a2-5fcb-a7fe-5d966f821278",
+      "exception_id": "2b56915b-4dd0-57e1-8fc5-b9a87ced2d09",
+      "fix": {
+        "action": "ADD_PUNCH",
+        "changes": [
+          {
+            "target_id": "ef2f1745-6e3c-5a0b-903a-bc1a7c991c54",
+            "field": "punch.OUT",
+            "old": null,
+            "new": "2026-03-10T12:30:00+00:00"
+          }
+        ]
+      },
+      "rationale": "Rule-based fix used (LLM output invalid). Follows POL-TA-01.",
+      "citations": [
+        {
+          "clause_id": "POL-TA-01",
+          "quote": "Missed punch. If an employee has a clock-in but no clock-out, the clock-out can be corrected to the scheduled shift end, as long as the resulting shift stays 12 hours or less. If there is no schedule for that day, the case is escalated to the manager.",
+          "score": 0.8
+        }
+      ],
+      "confidence": 0.75,
+      "source": "RULES_FALLBACK",
+      "model": null,
+      "prompt_version": "v1",
+      "validation": {
+        "passed": true,
+        "violations": []
+      },
+      "status": "APPROVED"
+    }
+  },
+  {
+    "exception": {
+      "id": "230b9fc2-221d-5f97-8721-3f5a1bb2c8c3",
+      "type": "OVERTIME_RISK",
+      "severity": "HIGH",
+      "employee_id": "35f85c99-8edb-59f1-a05f-0fb2adf3f65c",
+      "timecard_id": "97bd8878-738e-547e-a713-2f5ca6abbbe8",
+      "work_date": "2026-03-05",
+      "evidence": {
+        "worked_hours": 31.5,
+        "remaining_scheduled_hours": 8.0,
+        "projected_hours": 39.5
+      },
+      "policy_refs": [
+        "POL-TA-04",
+        "POL-TA-03"
+      ],
+      "baseline_fix": {
+        "action": "REASSIGN_SHIFT",
+        "changes": [
+          {
+            "target_id": "3c6028cf-14ed-566d-afec-bea17b99e06b",
+            "field": "employee_id",
+            "old": "35f85c99-8edb-59f1-a05f-0fb2adf3f65c",
+            "new": null
+          }
+        ]
+      },
+      "status": "OPEN"
+    },
+    "proposal": {
+      "id": "846168fc-f361-5089-9bd2-467d5d38921b",
+      "exception_id": "230b9fc2-221d-5f97-8721-3f5a1bb2c8c3",
+      "fix": {
+        "action": "REASSIGN_SHIFT",
+        "changes": [
+          {
+            "target_id": "3c6028cf-14ed-566d-afec-bea17b99e06b",
+            "field": "employee_id",
+            "old": "35f85c99-8edb-59f1-a05f-0fb2adf3f65c",
+            "new": null
+          }
+        ]
+      },
+      "rationale": "Applying POL-TA-04 to resolve the OVERTIME_RISK exception.",
+      "citations": [
+        {
+          "clause_id": "POL-TA-04",
+          "quote": "Weekly overtime risk. Overtime applies beyond 40 hours per week. If worked hours plus remaining scheduled hours are projected at 38 hours or more, raise an overtime risk alert. The suggested action is to reduce or reassign upcoming shifts.",
+          "score": 0.9167
+        }
+      ],
+      "confidence": 0.9,
+      "source": "LLM",
+      "model": "mock-llm",
+      "prompt_version": "v1",
+      "validation": {
+        "passed": true,
+        "violations": []
+      },
+      "status": "REJECTED"
+    }
+  },
+  {
+    "exception": {
+      "id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "type": "POLICY_BREACH",
+      "severity": "HIGH",
+      "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
+      "timecard_id": "cd31272e-8000-5190-8904-2724bd3e3dc7",
+      "work_date": "2026-03-06",
+      "evidence": {
+        "worked_hours": 13.5,
+        "max_daily_hours": 12
+      },
+      "policy_refs": [
+        "POL-TA-03"
+      ],
+      "baseline_fix": null,
+      "status": "ESCALATED"
+    },
+    "proposal": {
+      "id": "6999deb1-5b0f-563b-9f74-b9c503abf6b1",
+      "exception_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "fix": {
+        "action": "FLAG_FOR_MANAGER",
+        "changes": []
+      },
+      "rationale": "AI could not safely propose a fix (LLM output invalid; no rule-based fix exists). Manager review needed.",
+      "citations": [],
+      "confidence": 0.0,
+      "source": "RULES_FALLBACK",
+      "model": null,
+      "prompt_version": "v1",
+      "validation": null,
+      "status": "ESCALATED"
+    }
+  },
+  {
+    "exception": {
+      "id": "cd3e9600-9000-58a1-b988-d40fe598375b",
+      "type": "SCHEDULE_CONFLICT",
+      "severity": "HIGH",
+      "employee_id": "1d6ea33a-19b1-5359-915e-f208177a055e",
+      "timecard_id": "a12eb40f-ce0a-56c2-9b14-847280190be4",
+      "work_date": "2026-03-04",
+      "evidence": {
+        "shift_a": "76e5fc12-0907-5c07-8d91-2ad409a0b63d",
+        "shift_b": "8d9f3636-efa0-5e77-80d4-36e6d0ab4f59",
+        "overlap_hours": 2.0
+      },
+      "policy_refs": [
+        "POL-TA-05"
+      ],
+      "baseline_fix": {
+        "action": "REASSIGN_SHIFT",
+        "changes": [
+          {
+            "target_id": "8d9f3636-efa0-5e77-80d4-36e6d0ab4f59",
+            "field": "employee_id",
+            "old": "1d6ea33a-19b1-5359-915e-f208177a055e",
+            "new": null
+          }
+        ]
+      },
+      "status": "ESCALATED"
+    },
+    "proposal": {
+      "id": "99190dd7-33ed-5e5d-a72f-6011d309f7bc",
+      "exception_id": "cd3e9600-9000-58a1-b988-d40fe598375b",
+      "fix": {
+        "action": "FLAG_FOR_MANAGER",
+        "changes": []
+      },
+      "rationale": "AI could not safely propose a fix (confidence 0.20 is below 0.5). Manager review needed.",
+      "citations": [
+        {
+          "clause_id": "POL-TA-05",
+          "quote": "Schedule conflict. An employee cannot have two overlapping shifts. Resolution: keep the earliest-assigned shift and propose reassigning the other shift, with manager approval.",
+          "score": 0.8571
+        }
+      ],
+      "confidence": 0.2,
+      "source": "LLM",
+      "model": "mock-llm",
+      "prompt_version": "v1",
+      "validation": null,
+      "status": "ESCALATED"
+    }
+  }
+]

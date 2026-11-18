@@ -1,0 +1,163 @@
+{
+  "timecard": {
+    "id": "11111111-1111-4111-8111-000000000001",
+    "employee_id": "22222222-2222-4222-8222-000000000001",
+    "work_date": "2026-03-10",
+    "punches": [
+      {
+        "id": "33333333-3333-4333-8333-000000000001",
+        "employee_id": "22222222-2222-4222-8222-000000000001",
+        "type": "IN",
+        "timestamp": "2026-03-10T03:32:00Z"
+      }
+    ],
+    "shifts": [
+      {
+        "id": "44444444-4444-4444-8444-000000000001",
+        "employee_id": "22222222-2222-4222-8222-000000000001",
+        "start": "2026-03-10T03:30:00Z",
+        "end": "2026-03-10T12:30:00Z",
+        "location_id": "loc-pune-01"
+      }
+    ],
+    "notes": "Forgot to clock out, left at the usual time."
+  },
+  "exception": {
+    "id": "55555555-5555-4555-8555-000000000001",
+    "type": "MISSED_PUNCH",
+    "severity": "MEDIUM",
+    "employee_id": "22222222-2222-4222-8222-000000000001",
+    "timecard_id": "11111111-1111-4111-8111-000000000001",
+    "work_date": "2026-03-10",
+    "evidence": {
+      "clock_in": "2026-03-10T03:32:00+00:00",
+      "clock_out": null,
+      "scheduled_shift_end": "2026-03-10T12:30:00+00:00",
+      "resulting_shift_hours": 8.97
+    },
+    "policy_refs": [
+      "POL-TA-01"
+    ],
+    "baseline_fix": {
+      "action": "ADD_PUNCH",
+      "changes": [
+        {
+          "target_id": "11111111-1111-4111-8111-000000000001",
+          "field": "punch.OUT",
+          "old": null,
+          "new": "2026-03-10T12:30:00+00:00"
+        }
+      ]
+    },
+    "status": "PROPOSED"
+  },
+  "proposal": {
+    "id": "52adaae0-46fe-57b9-a6b1-c36d08496a75",
+    "exception_id": "55555555-5555-4555-8555-000000000001",
+    "fix": {
+      "action": "ADD_PUNCH",
+      "changes": [
+        {
+          "target_id": "11111111-1111-4111-8111-000000000001",
+          "field": "punch.OUT",
+          "old": null,
+          "new": "2026-03-10T12:30:00+00:00"
+        }
+      ]
+    },
+    "rationale": "Applying POL-TA-01 to resolve the MISSED_PUNCH exception.",
+    "citations": [
+      {
+        "clause_id": "POL-TA-01",
+        "quote": "Missed punch. If an employee has a clock-in but no clock-out, the clock-out can be corrected to the scheduled shift end, as long as the resulting shift stays 12 hours or less. If there is no schedule for that day, the case is escalated to the manager.",
+        "score": 0.8
+      }
+    ],
+    "confidence": 0.9,
+    "source": "LLM",
+    "model": "mock-llm",
+    "prompt_version": "v1",
+    "validation": {
+      "passed": true,
+      "violations": []
+    },
+    "status": "PENDING_REVIEW"
+  },
+  "decision": null,
+  "audit_events": [
+    {
+      "id": "92d5dd37-2dac-53b3-940c-2f69b3250be3",
+      "ts": "2026-03-11T04:00:00Z",
+      "actor": "system",
+      "event_type": "WORKFLOW_STARTED",
+      "entity_type": "exception",
+      "entity_id": "55555555-5555-4555-8555-000000000001",
+      "payload": {
+        "exception_type": "MISSED_PUNCH"
+      }
+    },
+    {
+      "id": "ff130a26-80f8-5fe5-af26-785ff4dd4c78",
+      "ts": "2026-03-11T04:00:01Z",
+      "actor": "system",
+      "event_type": "POLICY_RETRIEVED",
+      "entity_type": "exception",
+      "entity_id": "55555555-5555-4555-8555-000000000001",
+      "payload": {
+        "clauses": [
+          {
+            "clause_id": "POL-TA-01",
+            "score": 0.8
+          },
+          {
+            "clause_id": "POL-TA-04",
+            "score": 0.3
+          },
+          {
+            "clause_id": "POL-TA-06",
+            "score": 0.3
+          }
+        ],
+        "min_score": 0.35
+      }
+    },
+    {
+      "id": "c9fc3aa7-07e4-5b53-a8e8-3ec3e61ebd1d",
+      "ts": "2026-03-11T04:00:02Z",
+      "actor": "llm",
+      "event_type": "LLM_CALLED",
+      "entity_type": "exception",
+      "entity_id": "55555555-5555-4555-8555-000000000001",
+      "payload": {
+        "attempt": 1,
+        "model": "mock-llm"
+      }
+    },
+    {
+      "id": "29005802-e20e-5918-ad28-3db5b4066ed0",
+      "ts": "2026-03-11T04:00:03Z",
+      "actor": "system",
+      "event_type": "VALIDATION_RESULT",
+      "entity_type": "exception",
+      "entity_id": "55555555-5555-4555-8555-000000000001",
+      "payload": {
+        "attempt": 1,
+        "passed": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "ab061178-4e84-5d0f-8346-89c0aed6adfa",
+      "ts": "2026-03-11T04:00:04Z",
+      "actor": "system",
+      "event_type": "PROPOSAL_CREATED",
+      "entity_type": "exception",
+      "entity_id": "55555555-5555-4555-8555-000000000001",
+      "payload": {
+        "proposal_id": "52adaae0-46fe-57b9-a6b1-c36d08496a75",
+        "status": "PENDING_REVIEW",
+        "source": "LLM"
+      }
+    }
+  ]
+}
