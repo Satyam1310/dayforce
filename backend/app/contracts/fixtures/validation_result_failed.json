@@ -1,0 +1,15 @@
+{
+  "passed": false,
+  "violations": [
+    {
+      "code": "SHIFT_OVER_MAX_HOURS",
+      "message": "Proposed clock-out makes the shift 14.5 hours, above the 12 hour limit.",
+      "clause_id": "POL-TA-01"
+    },
+    {
+      "code": "UNRELATED_CHANGE",
+      "message": "Fix modifies a field that is not part of the detected exception.",
+      "clause_id": null
+    }
+  ]
+}

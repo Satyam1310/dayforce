@@ -1,0 +1,25 @@
+# Placeholder handles: Harsh to fix. Source: CLAUDE.md sections 3 and 5.
+*                              @harsh
+/CLAUDE.md                     @harsh
+/Makefile                      @satyam
+/.env.example                  @raman @harsh
+/.github/                      @satyam
+/backend/Dockerfile            @satyam
+/backend/app/contracts/        @harsh
+/backend/app/api/              @raman
+/backend/app/db/               @raman
+/backend/app/observability/    @raman
+/backend/app/domain/rules/     @ankit
+/backend/app/validator/        @ankit
+/backend/app/ai/               @harsh
+/backend/tests/unit/ai/        @harsh
+/backend/tests/unit/contracts/ @harsh
+/backend/tests/integration/    @pranav
+/frontend/                     @priyanshu
+/frontend/Dockerfile           @satyam
+/data/policies/                @harsh
+/data/seed/                    @ankit
+/eval/                         @pranav
+/infra/                        @satyam
+/docs/openapi.yaml             @raman
+/docs/OVERVIEW.md              @harsh

@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic>=2
+httpx
+psycopg[binary]
+fastembed
+pytest
+pytest-cov
+ruff
+python-dotenv

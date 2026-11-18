@@ -1,0 +1,13 @@
+{
+  "id": "88888888-8888-4888-8888-000000000001",
+  "ts": "2026-03-11T04:15:00+00:00",
+  "actor": "mgr-0001",
+  "event_type": "DECISION_APPROVED",
+  "entity_type": "proposal",
+  "entity_id": "66666666-6666-4666-8666-000000000001",
+  "payload": {
+    "decision_id": "77777777-7777-4777-8777-000000000001",
+    "exception_id": "55555555-5555-4555-8555-000000000001",
+    "comment": "Confirmed with the employee, they left at 18:00."
+  }
+}

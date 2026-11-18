@@ -1,0 +1,13 @@
+{
+  "id": "66666666-6666-4666-8666-000000000002",
+  "exception_id": "55555555-5555-4555-8555-000000000001",
+  "fix": { "action": "FLAG_FOR_MANAGER", "changes": [] },
+  "rationale": "AI could not safely propose a fix: no policy clause matched with enough confidence. Manager review needed.",
+  "citations": [],
+  "confidence": 0.0,
+  "source": "RULES_FALLBACK",
+  "model": null,
+  "prompt_version": "v1",
+  "validation": null,
+  "status": "ESCALATED"
+}

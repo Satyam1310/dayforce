@@ -1,0 +1,29 @@
+{
+  "id": "66666666-6666-4666-8666-000000000001",
+  "exception_id": "55555555-5555-4555-8555-000000000001",
+  "fix": {
+    "action": "ADD_PUNCH",
+    "changes": [
+      {
+        "target_id": "11111111-1111-4111-8111-000000000001",
+        "field": "punch.OUT",
+        "old": null,
+        "new": "2026-03-10T12:30:00+00:00"
+      }
+    ]
+  },
+  "rationale": "The employee clocked in but never out. Policy allows correcting the clock-out to the scheduled shift end (18:00 IST), giving a 9 hour shift, within the 12 hour limit.",
+  "citations": [
+    {
+      "clause_id": "POL-TA-01",
+      "quote": "the clock-out can be corrected to the scheduled shift end, as long as the shift stays 12 hours or less",
+      "score": 0.82
+    }
+  ],
+  "confidence": 0.9,
+  "source": "LLM",
+  "model": "example-open-weight-model",
+  "prompt_version": "v1",
+  "validation": { "passed": true, "violations": [] },
+  "status": "PENDING_REVIEW"
+}
