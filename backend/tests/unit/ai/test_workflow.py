@@ -72,9 +72,11 @@ class ScriptedLLM:
     def __init__(self, *replies):
         self.replies = list(replies)
         self.prompts = []
+        self.timeouts = []
 
-    def complete(self, system, user):
+    def complete(self, system, user, timeout=None):
         self.prompts.append(user)
+        self.timeouts.append(timeout)
         return self.replies.pop(0)
 
 
@@ -314,3 +316,100 @@ def test_openai_client_errors(monkeypatch):
     monkeypatch.setattr("httpx.post", lambda *a, **k: FakeResp({"unexpected": 1}))
     with pytest.raises(LLMError):
         c.complete("s", "u")
+
+
+# ---- shared retry budget and deadline ----
+
+
+def good_reply(exc):
+    return MockLLM().complete("", "<exception>" + exc.model_dump_json() + "</exception>")
+
+
+def test_budget_is_shared_across_failure_causes(exc, tc):
+    # call 1: invalid JSON. call 2: valid reply but the validator rejects it.
+    # Old behaviour allowed a 3rd call; now the shared budget of 2 is spent -> fallback.
+    llm = ScriptedLLM("not json", good_reply(exc), good_reply(exc))
+    seen = []
+
+    def v(tc_, exc_, fix, cfg):
+        seen.append(fix)
+        # 1st validation = the LLM fix (reject); 2nd = the baseline fix in fallback (accept)
+        return (
+            fail_validator(tc_, exc_, fix, cfg)
+            if len(seen) == 1
+            else always_pass_validator(tc_, exc_, fix, cfg)
+        )
+
+    p, ev = run(exc, tc, llm, validator=v)
+    assert len(llm.prompts) == 2
+    assert p.source == ProposalSource.RULES_FALLBACK and p.status == "PENDING_REVIEW"
+    assert "RETRY_BUDGET_EXHAUSTED" in types(ev)
+
+
+def test_never_more_than_max_llm_calls(exc, tc):
+    llm = MockLLM("invalid_json")
+    run(exc, tc, llm, settings=AISettings(max_llm_calls=1))
+    assert llm.calls == 1
+    llm = MockLLM("bad_citation")
+    run(exc, tc, llm, settings=AISettings(max_llm_calls=2))
+    assert llm.calls == 2
+    llm = MockLLM("invalid_json")
+    run(exc, tc, llm, settings=AISettings(max_llm_calls=5))
+    assert llm.calls == 5
+
+
+def test_deadline_stops_further_calls_and_falls_back(exc, tc):
+    t = iter([0.0, 0.0, 26.0, 26.0, 26.0])  # start, 1st check, 2nd check (past 25s)
+    llm = ScriptedLLM("not json", good_reply(exc))
+    p, ev = run_workflow(
+        exc,
+        tc,
+        retriever=InMemoryRetriever(),
+        llm=llm,
+        validator=always_pass_validator,
+        cfg=CFG,
+        settings=S,
+        clock=lambda: next(t),
+    )
+    assert len(llm.prompts) == 1
+    assert p.source == ProposalSource.RULES_FALLBACK and p.status == "PENDING_REVIEW"
+    assert "DEADLINE_EXCEEDED" in types(ev)
+
+
+def test_per_call_timeout_is_capped_by_remaining_time(exc, tc):
+    t = iter([0.0, 0.0, 10.0, 10.0, 10.0])
+    llm = ScriptedLLM("not json", good_reply(exc))
+    p, _ = run_workflow(
+        exc,
+        tc,
+        retriever=InMemoryRetriever(),
+        llm=llm,
+        validator=always_pass_validator,
+        cfg=CFG,
+        settings=S,
+        clock=lambda: next(t),
+    )
+    assert llm.timeouts == [25.0, 15.0]
+    assert p.source == ProposalSource.LLM
+
+
+def test_openai_client_uses_smaller_of_own_and_given_timeout(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        "httpx.post",
+        lambda url, json, headers, timeout: (
+            seen.append(timeout) or FakeResp({"choices": [{"message": {"content": "{}"}}]})
+        ),
+    )
+    c = OpenAICompatibleLLM("http://h", "m", timeout=20)
+    c.complete("s", "u", timeout=5)
+    c.complete("s", "u", timeout=99)
+    c.complete("s", "u")
+    assert seen == [5, 20, 20]
+
+
+def test_fallback_confidence_constant_is_used(exc, tc):
+    from app.ai.settings import FALLBACK_CONFIDENCE
+
+    p, _ = run(exc, tc, MockLLM("timeout"))
+    assert p.confidence == FALLBACK_CONFIDENCE == 0.75
