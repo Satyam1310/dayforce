@@ -23,6 +23,9 @@ class AISettings:
     retrieval_min_score: float = 0.35
     confidence_escalate_below: float = 0.5
     llm_mock_mode: str = "ok"  # only used by the mock provider
+    retriever: str = "memory"  # memory | pgvector
+    database_url: str = ""
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
     max_llm_calls: int = 2  # shared budget per proposal, whatever the failure cause
     total_deadline_seconds: float = 25.0  # wall-clock limit for all LLM work per proposal
 
@@ -38,4 +41,7 @@ class AISettings:
             retrieval_min_score=float(e.get("RETRIEVAL_MIN_SCORE", "0.35")),
             confidence_escalate_below=float(e.get("CONFIDENCE_ESCALATE_BELOW", "0.5")),
             llm_mock_mode=e.get("LLM_MOCK_MODE", "ok"),
+            retriever=e.get("RETRIEVER", "memory"),
+            database_url=e.get("DATABASE_URL", ""),
+            embedding_model=e.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
         )
