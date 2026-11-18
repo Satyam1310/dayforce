@@ -16,6 +16,7 @@ Hey team! This is our one shared source of truth: what we're building, who's doi
 7. Work on branches and open PRs (section 6). Let's not push straight to `main` or `production`.
 8. After AI generates code, read it and make sure you understand it. Everyone explains their own part in the demo video. If you can't explain a line, simplify it.
 9. Keep it small. Four exception types, one flow, done really well. No extra features.
+10. Write commit and PR messages in plain words about what changed and why. No tool attribution lines.
 
 ---
 
