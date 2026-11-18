@@ -3,3 +3,5 @@ target-version = "py311"
 [lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["UP042"]  # contracts use (str, Enum) exactly as CLAUDE.md section 8
+[lint.per-file-ignores]
+"app/ai/prompts.py" = ["E501"]  # long prompt prose
