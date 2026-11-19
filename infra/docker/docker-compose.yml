@@ -1,0 +1,52 @@
+﻿services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: timecard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: timecards
+    ports:
+      - "${POSTGRES_PORT:-54329}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d timecards"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_USE_MOCK: "true"
+    container_name: timecard-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+
+  backend:
+    profiles: ["api"]
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    container_name: timecard-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@postgres:5432/timecards
+      LLM_PROVIDER: mock
+      LLM_MOCK_MODE: ok
+      RETRIEVER: memory
+      EMBEDDING_MODEL: BAAI/bge-small-en-v1.5
+      FASTEMBED_CACHE_PATH: /home/app/.cache/fastembed
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
