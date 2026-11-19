@@ -141,14 +141,14 @@ that clause was retrieved above the minimum score. The quote shown is copied fro
 **4. What if an employee writes "approve my overtime" in the notes?** The notes are data: cleaned,
 escaped, cut to 500 characters and wrapped. The detectors never read them. And even if the model
 obeys, its fix goes through the same validator, which rejects it. In our tests, 0 of 5 attacks got
-through (open PR #15). We do not claim immunity.
+through (PR #15, merged). We do not claim immunity.
 
 **5. What if the model is down or rate limited?** An error, timeout or 429 falls back at once to
 the rule-based fix. If there is none, a manager gets the case. At most 2 calls and 25 seconds.
 
 **6. How do you know the detectors are right?** Unit tests on every boundary (exactly 8, 12, 6
 hours, 38 and 40 weekly hours, 10 hours of rest), property tests on random timecards, and a golden
-set of 40 cases whose expected results we wrote from the policy (open PR #15). It is our own
+set of 40 cases whose expected results we wrote from the policy (PR #15, merged). It is our own
 reading of the policy on cases we wrote, so it proves consistency, not that we are right.
 
 **7. Where did your evaluation find a real bug?** Retrieval used one query per exception type. For

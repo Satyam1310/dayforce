@@ -9,10 +9,10 @@ measured by running the command shown. Things that exist only in an open pull re
 | Level | What it proves | Where | State |
 |---|---|---|---|
 | **Unit** | Each module does what it says, with the mock model | `backend/tests/unit/` | On `main` |
-| **Integration (database)** | Real pgvector retrieval: ingest the policy, search it with real embeddings, calibrate the score threshold | `backend/tests/unit/ai/test_pgvector_integration.py` (marked `integration`) | On `main`. Needs a database, so it is skipped without one |
+| **Integration (database)** | Real pgvector retrieval: ingest the policy, search it with real embeddings, calibrate the score threshold, and check every detector rule retrieves its own clause (7 tests) | `backend/tests/unit/ai/test_pgvector_integration.py` (marked `integration`) | On `main`. Needs a database, so it is skipped without one |
 | **Integration (API)** | The API against a real Postgres: seed, propose, approve, reject, audit | `backend/tests/integration/` | **Open PR #12** |
-| **Golden set** | 40 timecard cases with expected results: detection, validator, the whole workflow under five model behaviours, prompt injection | `backend/tests/golden/` | **Open PR #15** |
-| **Property tests** | The same promises on random timecards (never crashes, deterministic, 12 hour and 10 hour rules) | `backend/tests/unit/rules/test_properties.py` | **Open PR #15** |
+| **Golden set** | 40 timecard cases with expected results: detection, validator, the whole workflow under five model behaviours, prompt injection | `backend/tests/golden/` | On `main` (PR #15) |
+| **Property tests** | The same promises on random timecards (never crashes, deterministic, 12 hour and 10 hour rules) | `backend/tests/unit/rules/test_properties.py` | On `main` (PR #15) |
 | **Frontend** | Components, pages and the real API client (with `fetch` faked) | `frontend/src/**/*.test.ts(x)` | On `main` (25 tests). More in open PRs #12 to #14 |
 | **Smoke (real model)** | The real model returns valid JSON and grounded citations | `backend/scripts/smoke_llm.py`, `docs/llm_smoke_report.md` | On `main`. One real run so far |
 | **System** | The whole flow against a running API | not built yet | Planned |
@@ -39,7 +39,7 @@ docker rm -f pgv-test
 
 The first run downloads the embedding model (about 64 MB, measured) into a temporary folder.
 
-Golden set, report and property tests **(open PR #15)**:
+Golden set, report and property tests:
 
 ```bash
 python -m pytest tests/golden                  # the golden set as tests
@@ -65,18 +65,17 @@ npm run format:check                           # after open PR #14 (Prettier)
 
 ## Real numbers
 
-**On `main` today** (measured on Python 3.11 and Node 20):
+**On `main` today** (measured on Python 3.11 and Node 20, after PR #15 merged):
 
-- Backend: **249 tests pass** with a pgvector container, including the 6 database tests. Without
-  a database, 243 pass and 6 are skipped. Ruff is clean.
-- By area: detectors 64, validator 51, AI module and scripts 124 (6 of them database tests),
-  contracts 10.
-- Coverage: **99% overall** (1,554 statements, 13 missed), **100%** on `domain/rules` and
-  `validator`, above the 90% target.
+- Backend: **342 tests pass** with a pgvector container, including the 7 database tests. Without a
+  database, 335 pass and 7 are skipped. Ruff is clean.
+- By area: detectors and property tests 71, validator 51, AI module and scripts 152 (7 of them
+  database tests), contracts 10, golden set 58.
+- Coverage: **99% overall** (1,961 statements, 26 missed), **100%** on `domain/rules` and
+  `validator`, above the 90% target. The evaluation script is at 97%.
 - Frontend: **25 tests pass**, lint and build are clean.
 
-**With open PR #15** (golden set, evaluation, property tests): **342 backend tests pass** with a
-database, 99% coverage, ruff clean. The offline evaluation (mock model, no network) gives:
+The offline evaluation (mock model, no network; `python -m scripts.evaluate`, PR #15) gives:
 
 - **40 of 40 golden cases pass** every check.
 - Detection precision and recall are **100%** on every exception type (38 expected exceptions, 0
@@ -98,7 +97,7 @@ citations, no fallbacks or escalations.** Median time per proposal 1.1 s (20b) a
 95th percentile 1.8 s and 4.2 s. One injection note was not followed by either model.
 **Caveat:** this run happened before the real validator existed, so it used an always-pass
 validator. The real model with the real validator has not been run yet. The real-model evaluation
-(`python -m scripts.evaluate --real`, open PR #15) has not been run either.
+(`python -m scripts.evaluate --real`) has not been run either.
 
 **Retrieval calibration** (pgvector, real embeddings; 8 on-topic and 8 off-topic queries): on-topic
 queries scored 0.629 to 0.878, off-topic ones 0.406 to 0.511. The threshold is **0.57**, the

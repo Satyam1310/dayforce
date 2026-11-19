@@ -63,7 +63,7 @@ flowchart TD
 | Scripts | `backend/scripts/` | `smoke_llm.py` (compare models), `demo_flow.py` (narrated run for the demo), `export_mock_data.py` (data and types for the frontend). |
 | API and database | `backend/app/api`, `db`, `main.py` **(open PR #12)** | Cases, propose, approve, reject, audit, `/health`, `/metrics`, Postgres tables, append-only audit trigger. Not on `main` yet. |
 | Frontend | `frontend/` | Manager screens. On `main` it runs on built-in mock data. Screens against the real API are in open PRs #12 to #14. |
-| Evaluation | `backend/tests/golden`, `backend/scripts/evaluate.py` **(open PR #15)** | A golden set of 40 cases and the report script. Not on `main` yet. |
+| Evaluation | `backend/tests/golden`, `backend/scripts/evaluate.py` | A golden set of 40 cases and the script that writes `docs/evaluation_report.md` (PR #15, merged). |
 
 ## Where each safety check sits
 
@@ -92,8 +92,9 @@ flowchart TD
 ## What runs where today
 
 - On `main`: everything in the flow down to "Proposal: PENDING_REVIEW plus audit events", the
-  scripts, the mock data for the frontend, and the frontend on mock data.
-- In open PRs: the API and database (#12), the polished screens (#13), Prettier and the OpenAPI
-  file (#14), and the evaluation (#15).
+  scripts, the golden set and evaluation, the mock data for the frontend, and the frontend on mock
+  data.
+- In open PRs: the API and database (#12), the polished screens (#13), and Prettier and the OpenAPI
+  file (#14).
 - Not built: Docker images, Kubernetes manifests and CI. See Satyam's Docker and Kubernetes PRs
   when they exist; none exists yet.

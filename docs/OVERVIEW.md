@@ -34,7 +34,7 @@ clauses `POL-TA-01` to `POL-TA-07`).
 | Real-model smoke run (Groq) | Done once, before the real validator existed (section 5) |
 | Frontend screens on built-in mock data | Done (`frontend/`, 25 tests) |
 | API, Postgres tables, approve and reject, audit storage | **Open PR #12** (screens against it: #13, #14) |
-| Golden set, evaluation report, property tests | **Open PR #15** |
+| Golden set (40 cases), evaluation report, property tests | Done and merged (PR #15) |
 | Seed dataset of 60+ timecards with ground truth | Not started |
 | Docker, Kubernetes, CI/CD | See Satyam's Docker and Kubernetes PRs (none is open yet) |
 | Demo video, slides | Not started |
@@ -84,8 +84,8 @@ fall back = the baseline fix, validated, source RULES_FALLBACK (confidence 0.75)
 | **Rate limit (HTTP 429)** | Treated as any model failure: immediate fallback, no retry into a rate limit. The smoke and evaluation scripts also throttle to stay under the limit. The API does not throttle yet. | Stubbed 429 through the real client code |
 | **Invalid JSON or schema** | One more try inside the shared budget, then fall back. | Mock `invalid_json` |
 | **Made-up citation** | Rejected (a clause that was not retrieved). Counts against the budget, then fall back. | Mock `bad_citation` |
-| **Prompt injection in the notes** | Notes are cleaned, escaped and wrapped, and the detectors never read them. If the model obeys anyway, its fix goes through the same validator. | Hostile notes in unit tests; 5 golden cases (open PR #15) |
-| **A bad fix** (wrong time, over-deduction, wrong shift) | The validator rejects it with a reason, fed into the retry. After the budget, fall back or escalate. | 378 bad fixes all rejected (open PR #15) |
+| **Prompt injection in the notes** | Notes are cleaned, escaped and wrapped, and the detectors never read them. If the model obeys anyway, its fix goes through the same validator. | Hostile notes in unit tests; 5 golden cases (PR #15, merged) |
+| **A bad fix** (wrong time, over-deduction, wrong shift) | The validator rejects it with a reason, fed into the retry. After the budget, fall back or escalate. | 378 bad fixes all rejected (PR #15, merged) |
 | **Low model confidence** | Escalate to a manager with no AI fix. | Mock `low_confidence` |
 | **The rule-based fix itself breaks policy** | Escalate (`BASELINE_FIX_INVALID`). The model cannot rescue it by agreeing with it. | Unit and golden tests |
 
@@ -116,7 +116,7 @@ Lowest on-topic 0.629, highest off-topic 0.5108. A first guess of 0.5 let two of
 through, so the threshold is 0.57. Sixteen short queries is a small sample, so re-run the test if the
 model or the policy text changes. A second finding came from the golden-set work: one query per
 exception *type* ranked the weekly-overtime clause above the daily one, so a correct citation
-of `POL-TA-03` was rejected. Each detector rule now has its own query (open PR #15), and every rule
+of `POL-TA-03` was rejected. Each detector rule now has its own query (PR #15, merged), and every rule
 retrieves its own clause first (0.80 to 0.95 with real embeddings).
 
 ## 5. Real results
@@ -137,7 +137,7 @@ Read this carefully: it is a small run, one injection try per model, and it **ha
 real validator existed**, so it used an always-pass validator. The real model together with the real
 validator has not been run. Both models are Apache 2.0 licensed (Hugging Face model cards).
 
-**Evaluation on the golden set** (mock model, open PR #15; 40 cases we wrote, expected results
+**Evaluation on the golden set** (mock model, PR #15, merged; 40 cases we wrote, expected results
 written from the policy): 40 of 40 pass; detection precision and recall 100% on every type with 0
 false positives on 9 clean timecards; 378 of 378 bad fixes rejected; in all five mock model
 behaviours the final proposal matched the safe outcome and no unvalidated fix reached a manager;
@@ -145,7 +145,7 @@ a simulated model that obeys hostile notes got 0 of 5 attacks through. One-chara
 8 hour, 6 hour and 12 hour rules each failed the golden set, so the evaluation does catch
 regressions. See [TESTING.md](TESTING.md) for how to run it and the full list.
 
-**Tests on `main`:** 249 backend tests pass with a pgvector container (243 without; 6 need a
+**Tests on `main`:** 342 backend tests pass with a pgvector container (335 without; 7 need a
 database), 99% coverage, 100% on the detectors and the validator; 25 frontend tests.
 
 ## 6. How it scales up, and how to scale it down
@@ -188,7 +188,7 @@ Deployment (Docker images, Kubernetes, the autoscaler): see Satyam's Docker and 
 - **API and screens against it:** open PRs #12 to #14. Known issues there: the API paths differ
   from the spec in `CLAUDE.md`; the validator import in `routes.py` breaks once the validator is on
   `main`; the demo reset endpoint has no guard.
-- **Evaluation:** open PR #15. The real-model evaluation (`--real`) has not been run.
+- **Evaluation:** merged (PR #15), but the real-model evaluation (`--real`) has not been run.
 - **System test** of the whole flow against a running API, and a **load test**: not built.
 - **Docker, Kubernetes, CI/CD:** see Satyam's PRs; none is open. No CI runs today, so all results
   above are from local runs.
@@ -258,7 +258,7 @@ refuses to give a shift to another employee because that person's hours cannot b
 
 **11. How do you know the detectors are right?** Boundary tests (exactly 8, 12 and 6 hours, 38 and
 40 weekly hours, 10 hours of rest), property tests on random timecards, and a golden set whose
-expected results we wrote from the policy (open PR #15). It is our reading of the policy on cases we
+expected results we wrote from the policy (PR #15, merged). It is our reading of the policy on cases we
 wrote, so it shows consistency, not that we read the policy correctly.
 
 **12. How does it scale?** The workflow keeps no state, so copies can run side by side. The real
