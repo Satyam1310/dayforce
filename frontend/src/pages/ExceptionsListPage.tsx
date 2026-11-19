@@ -5,6 +5,7 @@ import { StatusBadge } from '../components/Badges'
 import { Icon } from '../components/Icon'
 import { Empty, ErrorState, Loading } from '../components/States'
 import { useAsync } from '../hooks/useAsync'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatPercent, humanize, shortId } from '../lib/format'
 import { summarize } from '../lib/summary'
 import {
@@ -58,10 +59,50 @@ function ProposalCell({ proposal }: { proposal: Proposal | null | undefined }) {
   }
 }
 
+/** Four real numbers about this set of cases: the outcome the tool is meant to deliver. */
+function Insights({ cases }: { cases: CaseListItem[] }) {
+  const proposals = cases.map((c) => c.proposal).filter((p): p is Proposal => Boolean(p))
+  const drafted = proposals.filter((p) => p.status !== 'ESCALATED')
+  const byAi = drafted.filter((p) => p.source === 'LLM')
+  const avg = byAi.length ? byAi.reduce((sum, p) => sum + p.confidence, 0) / byAi.length : null
+  const open = cases.filter((c) => c.exception.status !== 'RESOLVED').length
+  const escalated = cases.filter((c) => c.exception.status === 'ESCALATED').length
+  const items = [
+    {
+      value: String(open),
+      label: 'Open cases',
+      note: `of ${cases.length} found by the rule checks`,
+    },
+    {
+      value: `${byAi.length}/${drafted.length}`,
+      label: 'Fixes drafted by AI',
+      note: 'the rest used the rule-based fallback',
+    },
+    {
+      value: avg === null ? '–' : formatPercent(avg),
+      label: 'Average AI confidence',
+      note: 'below 50% is escalated automatically',
+    },
+    { value: String(escalated), label: 'Escalated', note: 'no safe fix, you decide directly' },
+  ]
+  return (
+    <dl className="insights">
+      {items.map((it) => (
+        <div key={it.label} className="insight">
+          <dt>{it.label}</dt>
+          <dd>{it.value}</dd>
+          <span className="insight-note">{it.note}</span>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 export function ExceptionsListPage() {
   // Filters live in the URL (?type=...&status=...) so a filtered view can be shared.
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
+  usePageTitle('Review queue')
   const type = EXCEPTION_TYPES.find((t) => t === params.get('type'))
   const status = EXCEPTION_STATUSES.find((s) => s === params.get('status'))
 
@@ -102,6 +143,8 @@ export function ExceptionsListPage() {
           until you approve it.
         </p>
       </header>
+
+      {data && data.length > 0 && <Insights cases={data} />}
 
       <div className="toolbar">
         <div className="tabs" role="group" aria-label="Status">

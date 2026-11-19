@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { Avatar } from '../components/Avatar'
 import { SeverityBadge, SourceBadge, StatusBadge } from '../components/Badges'
 import { Icon } from '../components/Icon'
+import { Toast } from '../components/Toast'
 import { CaseJourney } from '../components/CaseJourney'
 import { CitationList } from '../components/CitationList'
 import { DecisionForm } from '../components/DecisionForm'
@@ -12,6 +13,7 @@ import { ErrorState, Loading } from '../components/States'
 import { Timeline } from '../components/Timeline'
 import { ValidationPanel } from '../components/ValidationPanel'
 import { useAsync } from '../hooks/useAsync'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatDateTime, formatPercent, humanize, shortId } from '../lib/format'
 import { describeValue, orderEvidence } from '../lib/describe'
 import { POLICY_CLAUSES } from '../lib/policy'
@@ -87,6 +89,8 @@ function ExceptionDetailView({ id }: { id: string }) {
   const [generating, setGenerating] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+  const clearFlash = useCallback(() => setFlash(null), [])
+  usePageTitle(data ? humanize(data.exception.type) : 'Case')
 
   async function generateProposal() {
     setGenerating(true)
@@ -139,9 +143,16 @@ function ExceptionDetailView({ id }: { id: string }) {
         </div>
       )}
       {flash && (
-        <div className="banner banner-success" role="status">
-          {flash} <Link to={`/audit?entity_id=${proposal?.id ?? ''}`}>See it in the audit log</Link>
-        </div>
+        <Toast
+          message={flash}
+          tone={flash.startsWith('Fix approved') ? 'success' : 'neutral'}
+          onClose={clearFlash}
+          action={
+            <Link to={`/audit?entity_id=${proposal?.id ?? ''}`} className="toast-link">
+              See it in the audit log
+            </Link>
+          }
+        />
       )}
 
       <div className="case-layout">

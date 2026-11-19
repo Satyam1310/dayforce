@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { Empty, ErrorState, Loading } from '../components/States'
 import { useAsync } from '../hooks/useAsync'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { describeValue } from '../lib/describe'
 import { formatDateTime, humanize } from '../lib/format'
 
@@ -53,6 +54,7 @@ function formatDetail(value: unknown): string {
 
 export function AuditLogPage() {
   const [params, setParams] = useSearchParams()
+  usePageTitle('Audit log')
   const entityId = params.get('entity_id') ?? ''
   const [input, setInput] = useState(entityId)
   const { data, error, loading, reload } = useAsync(
