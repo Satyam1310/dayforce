@@ -28,6 +28,33 @@ VITE_USE_MOCK=false
 
 and restart `npm run dev`. Vite proxies `/api` to `http://localhost:8000`.
 
+## Production build (Docker / Kubernetes)
+
+Vite bakes `VITE_*` values into the JavaScript **at build time**, so pass them as Docker build
+args (changing them on a running container does nothing).
+
+| Variable            | Production value | Why                                                                                                                            |
+| ------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `VITE_USE_MOCK`     | `false`          | Real backend, no sample data. (Unset also means real API in `npm run build`, but set it explicitly.)                           |
+| `VITE_API_BASE_URL` | `/api`           | The default. The browser calls the **same origin** (`/api/cases`, ...); nginx forwards `/api/` to the backend. No CORS needed. |
+
+The backend's routes already start with `/api`, so nginx must forward the path **unchanged**
+(`proxy_pass` without a trailing path):
+
+```nginx
+location /api/ {
+    proxy_pass http://backend:8000;   # k8s: the backend Service name and port
+    proxy_set_header Host $host;
+    proxy_set_header X-Request-ID $request_id;
+}
+location / {
+    try_files $uri /index.html;       # React Router: unknown paths load the app
+}
+```
+
+Do not set `VITE_API_BASE_URL` to `http://backend:8000`: that name only resolves inside the
+cluster, not in the user's browser.
+
 ## Screens
 
 | Route             | What it shows                                                                                                                                                                                                      |
