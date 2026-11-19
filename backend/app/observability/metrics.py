@@ -13,9 +13,7 @@ from .logging import request_id_var
 
 log = logging.getLogger("app.access")
 
-HTTP_REQUESTS = Counter(
-    "http_requests_total", "HTTP requests", ["method", "route", "status"]
-)
+HTTP_REQUESTS = Counter("http_requests_total", "HTTP requests", ["method", "route", "status"])
 HTTP_LATENCY = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "route"]
 )

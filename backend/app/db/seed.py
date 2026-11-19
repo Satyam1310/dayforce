@@ -82,8 +82,13 @@ def load_seed(conn: psycopg.Connection, *, with_history: bool = True) -> dict[st
             )
         )
     repo.insert_audit(conn, events)
-    return {"timecards": len(timecards), "exceptions": loaded, "proposals": 0, "decisions": 0,
-            "audit_events": len(events)}
+    return {
+        "timecards": len(timecards),
+        "exceptions": loaded,
+        "proposals": 0,
+        "decisions": 0,
+        "audit_events": len(events),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

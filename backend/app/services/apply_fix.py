@@ -76,9 +76,7 @@ def apply_fix(timecard: Timecard, fix: Fix) -> Timecard:
                 (PunchType.BREAK_END, break_start + timedelta(minutes=minutes)),
             ):
                 tc.punches.append(
-                    Punch(
-                        id=str(uuid.uuid4()), employee_id=tc.employee_id, type=kind, timestamp=ts
-                    )
+                    Punch(id=str(uuid.uuid4()), employee_id=tc.employee_id, type=kind, timestamp=ts)
                 )
 
         elif fix.action == FixAction.REASSIGN_SHIFT:
