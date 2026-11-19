@@ -42,10 +42,7 @@ function query(params: Record<string, string | undefined>): string {
 const casePath = (id: string) => `/cases/${encodeURIComponent(id)}`
 
 export const httpApi: Api = {
-  listExceptions: async (f) => {
-    const items = await request<CaseListItem[]>(`/cases${query({ status: f.status, type: f.type })}`)
-    return items.map((item) => item.exception)
-  },
+  listCases: (f) => request<CaseListItem[]>(`/cases${query({ status: f.status, type: f.type })}`),
   getExceptionDetail: (id) => request(casePath(id)),
   proposeFix: (caseId) => request(`${casePath(caseId)}/propose`, { method: 'POST' }),
   // Two endpoints: /approve and /reject. The body carries who decided and why.

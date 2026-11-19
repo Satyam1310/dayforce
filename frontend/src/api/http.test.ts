@@ -17,12 +17,12 @@ const call = (fn: ReturnType<typeof fakeFetch>, i = 0) => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('httpApi', () => {
-  it('lists cases with filters and returns the exceptions', async () => {
-    const exception = { id: 'c1', type: 'MISSED_PUNCH' }
-    const fetch = fakeFetch(200, [{ exception, proposal: null }])
-    const result = await httpApi.listExceptions({ status: 'OPEN', type: 'MISSED_PUNCH' })
+  it('lists cases with filters', async () => {
+    const items = [{ exception: { id: 'c1', type: 'MISSED_PUNCH' }, proposal: null }]
+    const fetch = fakeFetch(200, items)
+    const result = await httpApi.listCases({ status: 'OPEN', type: 'MISSED_PUNCH' })
     expect(call(fetch).url).toBe('/api/cases?status=OPEN&type=MISSED_PUNCH')
-    expect(result).toEqual([exception])
+    expect(result).toEqual(items)
   })
 
   it('gets one case and proposes', async () => {
