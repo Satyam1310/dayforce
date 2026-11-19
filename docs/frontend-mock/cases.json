@@ -251,7 +251,7 @@
         {
           "clause_id": "POL-TA-02",
           "quote": "Meal break. Shifts longer than 6 hours need an unpaid break of at least 30 minutes. If no break is logged, deduct 30 minutes from the shift, unless the employee states that no break was taken, in which case the manager decides.",
-          "score": 0.4706
+          "score": 1.0
         }
       ],
       "confidence": 0.9,
