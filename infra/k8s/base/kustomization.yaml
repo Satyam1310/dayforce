@@ -4,3 +4,6 @@ kind: Kustomization
 resources:
   - postgres.yaml
   - frontend.yaml
+  - backend-config.yaml
+  - backend.yaml
+  - backend-hpa.yaml
