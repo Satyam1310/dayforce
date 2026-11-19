@@ -1,77 +1,125 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
-import { SeverityBadge, StatusBadge } from '../components/Badges'
+import { StatusBadge } from '../components/Badges'
 import { Empty, ErrorState, Loading } from '../components/States'
 import { useAsync } from '../hooks/useAsync'
-import { formatDate, humanize, shortId } from '../lib/format'
+import { formatDate, formatPercent, humanize, shortId } from '../lib/format'
+import { summarize } from '../lib/summary'
 import {
   EXCEPTION_STATUSES,
   EXCEPTION_TYPES,
-  type DetectedException,
+  type CaseListItem,
   type ExceptionStatus,
   type ExceptionType,
+  type Proposal,
   type Severity,
 } from '../types/api'
 
 const SEVERITY_ORDER: Record<Severity, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 }
 
+// Status tabs, in the order a manager works through them.
+const TABS: { status: ExceptionStatus | undefined; label: string }[] = [
+  { status: 'PROPOSED', label: 'Awaiting review' },
+  { status: 'ESCALATED', label: 'Escalated' },
+  { status: 'OPEN', label: 'Open' },
+  { status: 'RESOLVED', label: 'Resolved' },
+  { status: undefined, label: 'All' },
+]
+
 // Highest severity first, then most recent day first.
-function sortExceptions(list: DetectedException[]): DetectedException[] {
+function sortCases(list: CaseListItem[]): CaseListItem[] {
   return [...list].sort(
     (a, b) =>
-      SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
-      b.work_date.localeCompare(a.work_date),
+      SEVERITY_ORDER[a.exception.severity] - SEVERITY_ORDER[b.exception.severity] ||
+      b.exception.work_date.localeCompare(a.exception.work_date),
   )
+}
+
+/** What the manager needs to know about the fix, in a few words. */
+function ProposalCell({ proposal }: { proposal: Proposal | null | undefined }) {
+  if (!proposal) return <span className="fix-cell is-none">No fix yet</span>
+  switch (proposal.status) {
+    case 'PENDING_REVIEW':
+      return proposal.source === 'LLM' ? (
+        <span className="fix-cell is-ready">AI fix ready, {formatPercent(proposal.confidence)}</span>
+      ) : (
+        <span className="fix-cell is-ready">Rule-based fix ready</span>
+      )
+    case 'ESCALATED':
+      return <span className="fix-cell is-blocked">No safe fix</span>
+    case 'APPROVED':
+      return <span className="fix-cell is-done">Fix applied</span>
+    case 'REJECTED':
+      return <span className="fix-cell is-none">Fix rejected</span>
+  }
 }
 
 export function ExceptionsListPage() {
   // Filters live in the URL (?type=...&status=...) so a filtered view can be shared.
   const [params, setParams] = useSearchParams()
-  const typeParam = params.get('type')
-  const statusParam = params.get('status')
-  const type = EXCEPTION_TYPES.find((t) => t === typeParam)
-  const status = EXCEPTION_STATUSES.find((s) => s === statusParam)
+  const type = EXCEPTION_TYPES.find((t) => t === params.get('type'))
+  const status = EXCEPTION_STATUSES.find((s) => s === params.get('status'))
 
-  const { data, error, loading, reload } = useAsync(
-    () => api.listExceptions({ type, status }),
-    [type, status],
-  )
+  // Type is filtered by the server; status is filtered here so every tab can show a count.
+  const { data, error, loading, reload } = useAsync(() => api.listCases({ type }), [type])
 
-  function setFilter(key: 'type' | 'status', value: string) {
+  function setFilter(key: 'type' | 'status', value: string | undefined) {
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
     setParams(next)
   }
 
-  const needsReview = data?.filter((e) => e.status === 'PROPOSED').length ?? 0
-  const escalated = data?.filter((e) => e.status === 'ESCALATED').length ?? 0
+  const count = (s: ExceptionStatus | undefined) =>
+    data?.filter((c) => !s || c.exception.status === s).length ?? 0
+  const waiting = data?.filter((c) => c.proposal?.status === 'PENDING_REVIEW').length ?? 0
+  const escalated = count('ESCALATED')
+  const rows = data ? sortCases(data.filter((c) => !status || c.exception.status === status)) : []
 
   return (
     <section>
-      <div className="page-head">
-        <div>
-          <h1>Timecard exceptions</h1>
-          <p className="muted">
-            Problems found by the rule checks. Review each AI-proposed fix before it changes a timecard.
-          </p>
-        </div>
-        {data && (
-          <div className="summary">
-            <span>
-              <strong>{needsReview}</strong> awaiting review
-            </span>
-            <span>
-              <strong>{escalated}</strong> escalated
-            </span>
-          </div>
-        )}
-      </div>
+      <header className="queue-head">
+        <h1>
+          {!data
+            ? 'Review queue'
+            : waiting === 0
+              ? 'Nothing is waiting for your decision'
+              : `${waiting} ${waiting === 1 ? 'fix is' : 'fixes are'} waiting for your decision`}
+        </h1>
+        <p className="lede">
+          {escalated > 0 && (
+            <>
+              {escalated} escalated {escalated === 1 ? 'case needs' : 'cases need'} you to resolve
+              {escalated === 1 ? ' it' : ' them'} directly.{' '}
+            </>
+          )}
+          Rule checks find the problems, the AI suggests fixes, and nothing changes on a timecard
+          until you approve it.
+        </p>
+      </header>
 
-      <div className="filters">
-        <label>
-          Type
-          <select aria-label="Type" value={type ?? ''} onChange={(e) => setFilter('type', e.target.value)}>
+      <div className="toolbar">
+        <div className="tabs" role="group" aria-label="Status">
+          {TABS.map((tab) => (
+            <button
+              key={tab.label}
+              type="button"
+              className="tab"
+              aria-pressed={status === tab.status}
+              onClick={() => setFilter('status', tab.status)}
+            >
+              {tab.label}
+              {data && <span className="tab-count">{count(tab.status)}</span>}
+            </button>
+          ))}
+        </div>
+        <label className="type-filter">
+          <span>Type</span>
+          <select
+            aria-label="Type"
+            value={type ?? ''}
+            onChange={(e) => setFilter('type', e.target.value || undefined)}
+          >
             <option value="">All types</option>
             {EXCEPTION_TYPES.map((t: ExceptionType) => (
               <option key={t} value={t}>
@@ -80,53 +128,44 @@ export function ExceptionsListPage() {
             ))}
           </select>
         </label>
-        <label>
-          Status
-          <select aria-label="Status" value={status ?? ''} onChange={(e) => setFilter('status', e.target.value)}>
-            <option value="">All statuses</option>
-            {EXCEPTION_STATUSES.map((s: ExceptionStatus) => (
-              <option key={s} value={s}>
-                {humanize(s)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {(type || status) && (
-          <button type="button" className="btn btn-link" onClick={() => setParams(new URLSearchParams())}>
-            Clear filters
-          </button>
-        )}
       </div>
 
       {error && <ErrorState error={error} onRetry={reload} />}
-      {!error && !data && loading && <Loading label="Loading exceptions…" />}
-      {!error && data && data.length === 0 && (
-        <Empty>No exceptions match these filters. Nothing to review.</Empty>
+      {!error && !data && loading && <Loading label="Loading the queue…" />}
+      {!error && data && rows.length === 0 && (
+        <Empty>
+          No exceptions match these filters. Nothing to review.{' '}
+          <button type="button" className="btn btn-link" onClick={() => setParams({})}>
+            Show all cases
+          </button>
+        </Empty>
       )}
-      {!error && data && data.length > 0 && (
-        <table className="table">
+      {!error && rows.length > 0 && (
+        <table className="table queue">
           <thead>
             <tr>
-              <th>Severity</th>
-              <th>Exception</th>
+              <th>Case</th>
               <th>Employee</th>
               <th>Work date</th>
-              <th>Policy</th>
+              <th>Fix</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            {sortExceptions(data).map((e) => (
-              <tr key={e.id} className={e.status === 'ESCALATED' ? 'row-escalated' : undefined}>
+            {rows.map(({ exception: e, proposal }) => (
+              <tr key={e.id} className={`sev-row sev-row-${e.severity.toLowerCase()}`}>
                 <td>
-                  <SeverityBadge severity={e.severity} />
-                </td>
-                <td>
-                  <Link to={`/exceptions/${e.id}`}>{humanize(e.type)}</Link>
+                  <Link to={`/exceptions/${e.id}`} className="case-link">
+                    {humanize(e.type)}
+                  </Link>
+                  <span className="case-summary">{summarize(e)}</span>
+                  <span className="case-severity">{humanize(e.severity)} severity</span>
                 </td>
                 <td title={e.employee_id}>Employee {shortId(e.employee_id)}</td>
-                <td>{formatDate(e.work_date)}</td>
-                <td className="small">{e.policy_refs.join(', ')}</td>
+                <td className="nowrap">{formatDate(e.work_date)}</td>
+                <td>
+                  <ProposalCell proposal={proposal} />
+                </td>
                 <td>
                   <StatusBadge status={e.status} />
                   {e.status === 'ESCALATED' && <span className="needs-manager">Needs manager</span>}

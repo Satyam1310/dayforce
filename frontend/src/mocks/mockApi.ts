@@ -34,14 +34,16 @@ function latestProposalFor(exceptionId: string): Proposal | null {
 }
 
 export const mockApi: Api = {
-  async listExceptions(filters) {
+  async listCases(filters) {
     await delay()
     return clone(
-      db.exceptions.filter(
-        (e) =>
-          (!filters.status || e.status === filters.status) &&
-          (!filters.type || e.type === filters.type),
-      ),
+      db.exceptions
+        .filter(
+          (e) =>
+            (!filters.status || e.status === filters.status) &&
+            (!filters.type || e.type === filters.type),
+        )
+        .map((exception) => ({ exception, proposal: latestProposalFor(exception.id) })),
     )
   },
 
