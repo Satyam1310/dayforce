@@ -15,8 +15,10 @@ npm run build
 
 ## Mock vs real backend
 
-By default the app uses an in-browser mock API (`src/mocks/`), so it works without the backend.
-A "Mock data" badge shows in the top bar.
+In `npm run dev` the app uses an in-browser mock API (`src/mocks/`), so it works without the backend.
+A "Mock data" badge shows in the top bar. A production build (`npm run build`, what Docker/Kubernetes
+deploys) uses the **real API** by default, so a deployment never shows fake data by accident.
+Set `VITE_USE_MOCK=true` at build time only if you really want a mock-data build (e.g. a static demo).
 
 To use the real FastAPI backend on port 8000, create `frontend/.env.local`:
 

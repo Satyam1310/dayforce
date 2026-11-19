@@ -63,7 +63,7 @@ function ExceptionDetailView({ id }: { id: string }) {
   if (error) return <ErrorState error={error} onRetry={reload} />
   if (!data) return loading ? <Loading label="Loading exception…" /> : null
 
-  const { exception, timecard, proposal, history } = data
+  const { exception, timecard, proposal, decision, history } = data
   const escalated = exception.status === 'ESCALATED' || proposal?.status === 'ESCALATED'
 
   return (
@@ -184,9 +184,22 @@ function ExceptionDetailView({ id }: { id: string }) {
                 />
               </>
             ) : (
-              <p className="decided">
-                This proposal was <strong>{humanize(proposal.status).toLowerCase()}</strong>.
-              </p>
+              <div className={`decided decided-${proposal.status.toLowerCase()}`}>
+                <p>
+                  This proposal was <strong>{humanize(proposal.status).toLowerCase()}</strong>
+                  {decision && (
+                    <>
+                      {' '}
+                      by <strong>{decision.manager_id}</strong> on {formatDateTime(decision.decided_at)}
+                    </>
+                  )}
+                  .
+                </p>
+                {decision?.comment && <blockquote className="decision-comment">“{decision.comment}”</blockquote>}
+                {proposal.status === 'REJECTED' && (
+                  <p className="muted small">Nothing was changed on the timecard.</p>
+                )}
+              </div>
             )}
           </>
         )}

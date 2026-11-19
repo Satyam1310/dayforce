@@ -8,6 +8,7 @@ const MISSED_PUNCH = '55555555-5555-4555-8555-000000000001' // fixture exception
 const PROMPT_INJECTION = '55555555-5555-4555-8555-000000000004'
 const ESCALATED = '55555555-5555-4555-8555-000000000005'
 const NO_PROPOSAL = '55555555-5555-4555-8555-000000000006'
+const REJECTED = '55555555-5555-4555-8555-000000000008'
 const PROPOSAL_1 = '66666666-6666-4666-8666-000000000001'
 
 describe('Exception detail', () => {
@@ -72,6 +73,21 @@ describe('Exception detail', () => {
     expect(
       await screen.findByText(/AI couldn't safely propose a fix, manager review needed/i),
     ).toBeInTheDocument()
+  })
+
+  it('shows a rejected proposal read-only, with who rejected it and why', async () => {
+    renderApp(`/exceptions/${REJECTED}`)
+    expect(await screen.findByText(/this proposal was/i)).toHaveTextContent('rejected by mgr-0001')
+    expect(screen.getByText(/employee confirmed no break was taken/i)).toBeInTheDocument()
+    expect(screen.getByText(/nothing was changed on the timecard/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve fix' })).not.toBeInTheDocument()
+  })
+
+  it('shows who approved after approving', async () => {
+    const user = userEvent.setup()
+    renderApp(`/exceptions/${MISSED_PUNCH}`)
+    await user.click(await screen.findByRole('button', { name: 'Approve fix' }))
+    expect(await screen.findByText(/this proposal was/i)).toHaveTextContent('approved by mgr-0001')
   })
 
   it('shows an error for an unknown exception', async () => {

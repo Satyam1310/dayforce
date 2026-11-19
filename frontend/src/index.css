@@ -509,6 +509,22 @@ textarea {
 }
 .decided {
   margin-top: 20px;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: #f3f5f8;
+}
+.decided p {
+  margin: 0;
+}
+.decided-approved {
+  background: var(--green-soft);
+}
+.decided-rejected {
+  background: var(--red-soft);
+}
+.decision-comment {
+  margin: 8px 0 4px;
+  font-style: italic;
 }
 .history {
   list-style: none;
