@@ -1,61 +1,77 @@
 {
   "timecard": {
-    "id": "28611d62-3f56-57c8-9a5b-f73d337abfb8",
+    "id": "ca5cd1ee-6a9c-53ec-8449-83b1c9b4d5d6",
     "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
     "work_date": "2026-03-12",
     "punches": [
       {
-        "id": "3cf1758c-98e3-51fa-8126-e8f2a39f9ef9",
+        "id": "7424578e-dbad-5c67-a93d-303b5e871053",
         "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
         "type": "IN",
         "timestamp": "2026-03-12T03:30:00Z"
       },
       {
-        "id": "3ae0bbca-90e8-587a-960e-baf9dc625948",
+        "id": "9c2353fd-61db-531a-a237-3d16218aec10",
+        "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
+        "type": "BREAK_START",
+        "timestamp": "2026-03-12T07:30:00Z"
+      },
+      {
+        "id": "977ba540-f0b9-58cb-b3f7-4ebcfa0b6d79",
+        "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
+        "type": "BREAK_END",
+        "timestamp": "2026-03-12T08:00:00Z"
+      },
+      {
+        "id": "6138cdd1-4559-5b02-b94f-1915a27a5332",
         "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
         "type": "OUT",
-        "timestamp": "2026-03-12T13:00:00Z"
+        "timestamp": "2026-03-12T12:00:00Z"
       }
     ],
     "shifts": [
       {
-        "id": "a72b794f-71a4-5e53-a3e5-383360ef29de",
+        "id": "590c1888-f15d-5041-8bec-f922b32a355f",
         "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
         "start": "2026-03-12T03:30:00Z",
-        "end": "2026-03-12T13:00:00Z",
-        "location_id": "loc-pune-01"
-      },
-      {
-        "id": "c6c9a7ed-a097-5abe-aeb0-f1807862d4ec",
-        "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
-        "start": "2026-03-13T03:30:00Z",
-        "end": "2026-03-13T12:30:00Z",
+        "end": "2026-03-12T12:00:00Z",
         "location_id": "loc-pune-01"
       }
     ],
     "notes": null
   },
   "exception": {
-    "id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+    "id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
     "type": "OVERTIME_RISK",
     "severity": "MEDIUM",
     "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
-    "timecard_id": "28611d62-3f56-57c8-9a5b-f73d337abfb8",
+    "timecard_id": "ca5cd1ee-6a9c-53ec-8449-83b1c9b4d5d6",
     "work_date": "2026-03-12",
     "evidence": {
-      "worked_hours": 31.5,
+      "rule": "WEEKLY_OT",
+      "week_start": "2026-03-09",
+      "worked_hours": 32.0,
       "remaining_scheduled_hours": 8.0,
-      "projected_hours": 39.5
+      "projected_hours": 40.0,
+      "overtime_risk_threshold": 38,
+      "weekly_ot_hours": 40,
+      "days_with_missing_punches": 0,
+      "remaining_shifts": [
+        {
+          "shift_id": "c109d8bc-ec81-5aac-bc59-5ced792be5da",
+          "start": "2026-03-13T03:30:00+00:00",
+          "hours": 8.0
+        }
+      ]
     },
     "policy_refs": [
-      "POL-TA-04",
-      "POL-TA-03"
+      "POL-TA-04"
     ],
     "baseline_fix": {
       "action": "REASSIGN_SHIFT",
       "changes": [
         {
-          "target_id": "c6c9a7ed-a097-5abe-aeb0-f1807862d4ec",
+          "target_id": "c109d8bc-ec81-5aac-bc59-5ced792be5da",
           "field": "employee_id",
           "old": "2375f0d7-292a-5ec2-857c-6787bd432753",
           "new": null
@@ -66,19 +82,19 @@
   },
   "proposal": {
     "id": "0ef57d1a-0aef-52ae-ae83-42bf9c3f8827",
-    "exception_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+    "exception_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
     "fix": {
       "action": "REASSIGN_SHIFT",
       "changes": [
         {
-          "target_id": "c6c9a7ed-a097-5abe-aeb0-f1807862d4ec",
+          "target_id": "c109d8bc-ec81-5aac-bc59-5ced792be5da",
           "field": "employee_id",
           "old": "2375f0d7-292a-5ec2-857c-6787bd432753",
           "new": null
         }
       ]
     },
-    "rationale": "Rule-based fix used (LLM output invalid). Follows POL-TA-04, POL-TA-03.",
+    "rationale": "Rule-based fix used (LLM output invalid). Follows POL-TA-04.",
     "citations": [
       {
         "clause_id": "POL-TA-04",
@@ -104,7 +120,7 @@
       "actor": "system",
       "event_type": "WORKFLOW_STARTED",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "exception_type": "OVERTIME_RISK"
       }
@@ -115,7 +131,7 @@
       "actor": "system",
       "event_type": "POLICY_RETRIEVED",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "clauses": [
           {
@@ -140,7 +156,7 @@
       "actor": "llm",
       "event_type": "LLM_CALLED",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "attempt": 1,
         "model": "mock-llm"
@@ -152,7 +168,7 @@
       "actor": "llm",
       "event_type": "LLM_INVALID_OUTPUT",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "attempt": 1,
         "error": "ValidationError"
@@ -164,7 +180,7 @@
       "actor": "llm",
       "event_type": "LLM_CALLED",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "attempt": 2,
         "model": "mock-llm"
@@ -176,7 +192,7 @@
       "actor": "llm",
       "event_type": "LLM_INVALID_OUTPUT",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "attempt": 2,
         "error": "ValidationError"
@@ -188,7 +204,7 @@
       "actor": "system",
       "event_type": "RETRY_BUDGET_EXHAUSTED",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "max_llm_calls": 2
       }
@@ -199,7 +215,7 @@
       "actor": "system",
       "event_type": "FALLBACK_USED",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "reason": "LLM output invalid"
       }
@@ -210,7 +226,7 @@
       "actor": "system",
       "event_type": "VALIDATION_RESULT",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "passed": true,
         "target": "baseline_fix"
@@ -222,7 +238,7 @@
       "actor": "system",
       "event_type": "PROPOSAL_CREATED",
       "entity_type": "exception",
-      "entity_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "entity_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "payload": {
         "proposal_id": "0ef57d1a-0aef-52ae-ae83-42bf9c3f8827",
         "status": "PENDING_REVIEW",
