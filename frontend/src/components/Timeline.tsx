@@ -68,7 +68,9 @@ export function Timeline({ timecard, proposedChanges = [] }: Props) {
         const end = Date.parse(s.end)
         return (
           <div className="tl-row" key={s.id}>
-            <div className="tl-label">{timecard.shifts.length > 1 ? `Shift ${i + 1}` : 'Scheduled'}</div>
+            <div className="tl-label">
+              {timecard.shifts.length > 1 ? `Shift ${i + 1}` : 'Scheduled'}
+            </div>
             <div className="tl-track">
               <div
                 className="tl-bar"

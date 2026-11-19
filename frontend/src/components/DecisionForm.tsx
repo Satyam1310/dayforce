@@ -72,7 +72,9 @@ export function DecisionForm({ caseId, onDecided }: Props) {
           {submitting === 'REJECT' ? 'Rejecting…' : 'Reject'}
         </button>
       </div>
-      <p className="muted small">Approving applies the change to the timecard. Your decision is logged.</p>
+      <p className="muted small">
+        Approving applies the change to the timecard. Your decision is logged.
+      </p>
     </form>
   )
 }

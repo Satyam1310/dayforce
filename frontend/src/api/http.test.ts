@@ -52,14 +52,18 @@ describe('httpApi', () => {
 
   it('turns the backend error shape into an ApiError', async () => {
     fakeFetch(409, { error: { code: 'CASE_ESCALATED', message: 'Escalated.', request_id: 'r1' } })
-    const err = await httpApi.decide('c1', { decision: 'APPROVE', manager_id: 'm', comment: null })
+    const err = await httpApi
+      .decide('c1', { decision: 'APPROVE', manager_id: 'm', comment: null })
       .catch((e: unknown) => e)
     expect(err).toBeInstanceOf(ApiError)
     expect(err).toMatchObject({ status: 409, code: 'CASE_ESCALATED', requestId: 'r1' })
   })
 
   it('reports a network failure clearly', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('offline'))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('offline'))),
+    )
     await expect(httpApi.listAudit()).rejects.toMatchObject({ code: 'NETWORK_ERROR' })
   })
 })

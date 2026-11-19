@@ -8,9 +8,11 @@ const seed = createSeed()
 const exc = (n: number) => seed.exceptions.find((e) => e.id.endsWith(`00${n}`))!
 const prop = (n: number) => seed.proposals.find((p) => p.exception_id === exc(n).id) ?? null
 const states = (n: number) =>
-  buildJourney(exc(n), prop(n), seed.decisions.find((d) => d.proposal_id === prop(n)?.id)).map(
-    (s) => s.state,
-  )
+  buildJourney(
+    exc(n),
+    prop(n),
+    seed.decisions.find((d) => d.proposal_id === prop(n)?.id),
+  ).map((s) => s.state)
 
 describe('CaseJourney', () => {
   it('AI fix waiting for the manager', () => {

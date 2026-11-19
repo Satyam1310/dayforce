@@ -10,13 +10,7 @@ import { ErrorState, Loading } from '../components/States'
 import { Timeline } from '../components/Timeline'
 import { ValidationPanel } from '../components/ValidationPanel'
 import { useAsync } from '../hooks/useAsync'
-import {
-  formatDate,
-  formatDateTime,
-  formatPercent,
-  humanize,
-  shortId,
-} from '../lib/format'
+import { formatDate, formatDateTime, formatPercent, humanize, shortId } from '../lib/format'
 import { describeValue } from '../lib/describe'
 import { POLICY_CLAUSES } from '../lib/policy'
 import { summarize } from '../lib/summary'
@@ -192,7 +186,9 @@ function ExceptionDetailView({ id }: { id: string }) {
                 {history.map((ev) => (
                   <li key={ev.id}>
                     <time className="history-time">{formatDateTime(ev.ts)}</time>
-                    <span className={`actor actor-${ev.actor === 'system' || ev.actor === 'llm' ? ev.actor : 'manager'}`}>
+                    <span
+                      className={`actor actor-${ev.actor === 'system' || ev.actor === 'llm' ? ev.actor : 'manager'}`}
+                    >
                       {ev.actor}
                     </span>
                     <span>{humanize(ev.event_type)}</span>
@@ -220,8 +216,8 @@ function ExceptionDetailView({ id }: { id: string }) {
           {!proposal && (
             <div className="no-proposal">
               <p>
-                No fix has been proposed yet. The AI will look up the policy, suggest a fix, and
-                the validator will check it before you see it.
+                No fix has been proposed yet. The AI will look up the policy, suggest a fix, and the
+                validator will check it before you see it.
               </p>
               <button
                 type="button"

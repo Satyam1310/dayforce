@@ -1,0 +1,784 @@
+openapi: 3.1.0
+info:
+  title: Timecard Exception Resolution API
+  description: Detect timecard exceptions, propose grounded fixes, require manager approval.
+  version: 0.1.0
+paths:
+  /api/cases:
+    get:
+      tags:
+      - cases
+      summary: List Cases
+      operationId: list_cases_api_cases_get
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - OPEN
+            - PROPOSED
+            - ESCALATED
+            - RESOLVED
+            type: string
+          - type: 'null'
+          title: Status
+      - name: type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ExceptionType'
+          - type: 'null'
+          title: Type
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CaseListItem'
+                title: Response List Cases Api Cases Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/cases/{case_id}:
+    get:
+      tags:
+      - cases
+      summary: Get Case
+      operationId: get_case_api_cases__case_id__get
+      parameters:
+      - name: case_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/audit:
+    get:
+      tags:
+      - audit
+      summary: List Audit
+      description: Newest first.
+      operationId: list_audit_api_audit_get
+      parameters:
+      - name: entity_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEvent'
+                title: Response List Audit Api Audit Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/cases/{case_id}/propose:
+    post:
+      tags:
+      - cases
+      summary: Propose
+      description: 'Run the AI workflow (retrieve -> LLM -> citation check -> validator -> fallback or
+
+        escalate) and save the proposal plus every audit event it returns. Never changes a
+
+        timecard: only a manager''s approval does.'
+      operationId: propose_api_cases__case_id__propose_post
+      parameters:
+      - name: case_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/cases/{case_id}/approve:
+    post:
+      tags:
+      - cases
+      summary: Approve
+      description: 'Approve the pending proposal: apply its fix to the timecard, resolve the case, audit.
+
+        All in one transaction; approving twice is refused (409), so a fix is applied once.'
+      operationId: approve_api_cases__case_id__approve_post
+      parameters:
+      - name: case_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/cases/{case_id}/reject:
+    post:
+      tags:
+      - cases
+      summary: Reject
+      description: 'Reject the pending proposal. The timecard is not changed; the case goes back to OPEN
+
+        (a new proposal can be requested).'
+      operationId: reject_api_cases__case_id__reject_post
+      parameters:
+      - name: case_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Case Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/dev/seed:
+    post:
+      tags:
+      - demo
+      summary: Seed
+      description: 'Demo/dev only: reset the app tables and load the starting data.'
+      operationId: seed_api_dev_seed_post
+      parameters:
+      - name: with_history
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: 'true: past proposals/decisions too; false: every case OPEN'
+          default: true
+          title: With History
+        description: 'true: past proposals/decisions too; false: every case OPEN'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeedResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      tags:
+      - ops
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /metrics:
+    get:
+      tags:
+      - ops
+      summary: Metrics
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    ApproveRequest:
+      properties:
+        manager_id:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Manager Id
+        comment:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Comment
+      type: object
+      required:
+      - manager_id
+      title: ApproveRequest
+    AuditEvent:
+      properties:
+        id:
+          type: string
+          title: Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+        actor:
+          type: string
+          title: Actor
+        event_type:
+          type: string
+          title: Event Type
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      type: object
+      required:
+      - id
+      - ts
+      - actor
+      - event_type
+      - entity_type
+      - entity_id
+      - payload
+      title: AuditEvent
+    CaseDetail:
+      properties:
+        timecard:
+          $ref: '#/components/schemas/Timecard'
+        exception:
+          $ref: '#/components/schemas/DetectedException'
+        proposal:
+          anyOf:
+          - $ref: '#/components/schemas/Proposal'
+          - type: 'null'
+        decision:
+          anyOf:
+          - $ref: '#/components/schemas/Decision'
+          - type: 'null'
+        audit_events:
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+          type: array
+          title: Audit Events
+      type: object
+      required:
+      - timecard
+      - exception
+      - audit_events
+      title: CaseDetail
+    CaseListItem:
+      properties:
+        exception:
+          $ref: '#/components/schemas/DetectedException'
+        proposal:
+          anyOf:
+          - $ref: '#/components/schemas/Proposal'
+          - type: 'null'
+      type: object
+      required:
+      - exception
+      title: CaseListItem
+    Decision:
+      properties:
+        id:
+          type: string
+          title: Id
+        proposal_id:
+          type: string
+          title: Proposal Id
+        decision:
+          type: string
+          enum:
+          - APPROVE
+          - REJECT
+          title: Decision
+        manager_id:
+          type: string
+          title: Manager Id
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comment
+        decided_at:
+          type: string
+          format: date-time
+          title: Decided At
+      type: object
+      required:
+      - id
+      - proposal_id
+      - decision
+      - manager_id
+      - decided_at
+      title: Decision
+    DetectedException:
+      properties:
+        id:
+          type: string
+          title: Id
+        type:
+          $ref: '#/components/schemas/ExceptionType'
+        severity:
+          $ref: '#/components/schemas/Severity'
+        employee_id:
+          type: string
+          title: Employee Id
+        timecard_id:
+          type: string
+          title: Timecard Id
+        work_date:
+          type: string
+          format: date
+          title: Work Date
+        evidence:
+          additionalProperties: true
+          type: object
+          title: Evidence
+        policy_refs:
+          items:
+            type: string
+          type: array
+          title: Policy Refs
+        baseline_fix:
+          anyOf:
+          - $ref: '#/components/schemas/Fix'
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - OPEN
+          - PROPOSED
+          - ESCALATED
+          - RESOLVED
+          title: Status
+      type: object
+      required:
+      - id
+      - type
+      - severity
+      - employee_id
+      - timecard_id
+      - work_date
+      - evidence
+      - policy_refs
+      - status
+      title: DetectedException
+    ExceptionType:
+      type: string
+      enum:
+      - MISSED_PUNCH
+      - OVERTIME_RISK
+      - SCHEDULE_CONFLICT
+      - POLICY_BREACH
+      title: ExceptionType
+    FieldChange:
+      properties:
+        target_id:
+          type: string
+          title: Target Id
+        field:
+          type: string
+          title: Field
+        old:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Old
+        new:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: New
+      type: object
+      required:
+      - target_id
+      - field
+      title: FieldChange
+    Fix:
+      properties:
+        action:
+          $ref: '#/components/schemas/FixAction'
+        changes:
+          items:
+            $ref: '#/components/schemas/FieldChange'
+          type: array
+          title: Changes
+      type: object
+      required:
+      - action
+      - changes
+      title: Fix
+    FixAction:
+      type: string
+      enum:
+      - ADD_PUNCH
+      - EDIT_PUNCH
+      - DEDUCT_BREAK
+      - REASSIGN_SHIFT
+      - FLAG_FOR_MANAGER
+      - NO_CHANGE
+      title: FixAction
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    PolicyCitation:
+      properties:
+        clause_id:
+          type: string
+          title: Clause Id
+        quote:
+          type: string
+          title: Quote
+        score:
+          type: number
+          title: Score
+      type: object
+      required:
+      - clause_id
+      - quote
+      - score
+      title: PolicyCitation
+    Proposal:
+      properties:
+        id:
+          type: string
+          title: Id
+        exception_id:
+          type: string
+          title: Exception Id
+        fix:
+          $ref: '#/components/schemas/Fix'
+        rationale:
+          type: string
+          maxLength: 400
+          title: Rationale
+        citations:
+          items:
+            $ref: '#/components/schemas/PolicyCitation'
+          type: array
+          title: Citations
+        confidence:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Confidence
+        source:
+          $ref: '#/components/schemas/ProposalSource'
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        prompt_version:
+          type: string
+          title: Prompt Version
+        validation:
+          anyOf:
+          - $ref: '#/components/schemas/ValidationResult'
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - PENDING_REVIEW
+          - APPROVED
+          - REJECTED
+          - ESCALATED
+          title: Status
+      type: object
+      required:
+      - id
+      - exception_id
+      - fix
+      - rationale
+      - citations
+      - confidence
+      - source
+      - prompt_version
+      - status
+      title: Proposal
+    ProposalSource:
+      type: string
+      enum:
+      - LLM
+      - RULES_FALLBACK
+      title: ProposalSource
+    Punch:
+      properties:
+        id:
+          type: string
+          title: Id
+        employee_id:
+          type: string
+          title: Employee Id
+        type:
+          $ref: '#/components/schemas/PunchType'
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+      type: object
+      required:
+      - id
+      - employee_id
+      - type
+      - timestamp
+      title: Punch
+    PunchType:
+      type: string
+      enum:
+      - IN
+      - OUT
+      - BREAK_START
+      - BREAK_END
+      title: PunchType
+    RejectRequest:
+      properties:
+        manager_id:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Manager Id
+        comment:
+          type: string
+          maxLength: 1000
+          minLength: 1
+          title: Comment
+      type: object
+      required:
+      - manager_id
+      - comment
+      title: RejectRequest
+    SeedResult:
+      properties:
+        timecards:
+          type: integer
+          title: Timecards
+        exceptions:
+          type: integer
+          title: Exceptions
+        proposals:
+          type: integer
+          title: Proposals
+        decisions:
+          type: integer
+          title: Decisions
+        audit_events:
+          type: integer
+          title: Audit Events
+      type: object
+      required:
+      - timecards
+      - exceptions
+      - proposals
+      - decisions
+      - audit_events
+      title: SeedResult
+    Severity:
+      type: string
+      enum:
+      - LOW
+      - MEDIUM
+      - HIGH
+      title: Severity
+    Shift:
+      properties:
+        id:
+          type: string
+          title: Id
+        employee_id:
+          type: string
+          title: Employee Id
+        start:
+          type: string
+          format: date-time
+          title: Start
+        end:
+          type: string
+          format: date-time
+          title: End
+        location_id:
+          type: string
+          title: Location Id
+      type: object
+      required:
+      - id
+      - employee_id
+      - start
+      - end
+      - location_id
+      title: Shift
+    Timecard:
+      properties:
+        id:
+          type: string
+          title: Id
+        employee_id:
+          type: string
+          title: Employee Id
+        work_date:
+          type: string
+          format: date
+          title: Work Date
+        punches:
+          items:
+            $ref: '#/components/schemas/Punch'
+          type: array
+          title: Punches
+        shifts:
+          items:
+            $ref: '#/components/schemas/Shift'
+          type: array
+          title: Shifts
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - id
+      - employee_id
+      - work_date
+      - punches
+      - shifts
+      title: Timecard
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ValidationResult:
+      properties:
+        passed:
+          type: boolean
+          title: Passed
+        violations:
+          items:
+            $ref: '#/components/schemas/Violation'
+          type: array
+          title: Violations
+      type: object
+      required:
+      - passed
+      - violations
+      title: ValidationResult
+    Violation:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        clause_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Clause Id
+      type: object
+      required:
+      - code
+      - message
+      title: Violation
