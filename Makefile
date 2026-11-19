@@ -1,8 +1,8 @@
 .PHONY: up down test lint k8s-up k8s-down openapi
 up:
-	@echo "TODO: Satyam"
+	@docker compose -f infra/docker/docker-compose.yml up -d --build
 down:
-	@echo "TODO: Satyam"
+	@docker compose -f infra/docker/docker-compose.yml down
 k8s-up:
 	@echo "TODO: Satyam"
 k8s-down:
