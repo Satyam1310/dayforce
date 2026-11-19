@@ -29,15 +29,17 @@
     "notes": "Stayed late to finish the stock count."
   },
   "exception": {
-    "id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+    "id": "2f18bcc8-585f-5680-b06b-383c291f8741",
     "type": "POLICY_BREACH",
     "severity": "HIGH",
     "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
     "timecard_id": "cd31272e-8000-5190-8904-2724bd3e3dc7",
     "work_date": "2026-03-06",
     "evidence": {
+      "rule": "DAILY_MAX",
       "worked_hours": 13.5,
-      "max_daily_hours": 12
+      "max_daily_hours": 12,
+      "reason_no_fix": "a day over the maximum needs manager review"
     },
     "policy_refs": [
       "POL-TA-03"
@@ -47,7 +49,7 @@
   },
   "proposal": {
     "id": "6999deb1-5b0f-563b-9f74-b9c503abf6b1",
-    "exception_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+    "exception_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
     "fix": {
       "action": "FLAG_FOR_MANAGER",
       "changes": []
@@ -69,7 +71,7 @@
       "actor": "system",
       "event_type": "WORKFLOW_STARTED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "exception_type": "POLICY_BREACH"
       }
@@ -80,7 +82,7 @@
       "actor": "system",
       "event_type": "POLICY_RETRIEVED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "clauses": [
           {
@@ -105,7 +107,7 @@
       "actor": "llm",
       "event_type": "LLM_CALLED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "attempt": 1,
         "model": "mock-llm"
@@ -117,7 +119,7 @@
       "actor": "llm",
       "event_type": "LLM_INVALID_OUTPUT",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "attempt": 1,
         "error": "ValidationError"
@@ -129,7 +131,7 @@
       "actor": "llm",
       "event_type": "LLM_CALLED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "attempt": 2,
         "model": "mock-llm"
@@ -141,7 +143,7 @@
       "actor": "llm",
       "event_type": "LLM_INVALID_OUTPUT",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "attempt": 2,
         "error": "ValidationError"
@@ -153,7 +155,7 @@
       "actor": "system",
       "event_type": "RETRY_BUDGET_EXHAUSTED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "max_llm_calls": 2
       }
@@ -164,7 +166,7 @@
       "actor": "system",
       "event_type": "FALLBACK_USED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "reason": "LLM output invalid"
       }
@@ -175,7 +177,7 @@
       "actor": "system",
       "event_type": "ESCALATED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "reason": "NO_BASELINE_FIX"
       }
@@ -186,7 +188,7 @@
       "actor": "system",
       "event_type": "PROPOSAL_CREATED",
       "entity_type": "exception",
-      "entity_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "entity_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "payload": {
         "proposal_id": "6999deb1-5b0f-563b-9f74-b9c503abf6b1",
         "status": "ESCALATED",

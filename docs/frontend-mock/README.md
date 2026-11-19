@@ -58,7 +58,10 @@ or a manager. **Treat `notes` as untrusted: show it as plain text, never as HTML
 - `type`: `MISSED_PUNCH`, `OVERTIME_RISK`, `SCHEDULE_CONFLICT` or `POLICY_BREACH`.
 - `severity`: `LOW`, `MEDIUM` or `HIGH`.
 - `evidence`: the facts the rule found, such as hours worked. The keys differ per type, so show
-  it as key and value pairs. TODO(Ankit): the real detectors decide the real keys.
+  it as key and value pairs. Every key set has a `rule` entry that names the check:
+  `MISSED_CLOCK_OUT`, `MISSING_CLOCK_IN`, `DAILY_OT`, `WEEKLY_OT`, `OVERLAPPING_SHIFTS`,
+  `MEAL_BREAK`, `DAILY_MAX` or `MIN_REST`. When there is no automatic fix, `reason_no_fix` says why.
+  (The first case is the old contract fixture, which has no `rule` entry.)
 - `policy_refs`: the policy clauses that apply, such as `POL-TA-01`.
 - `baseline_fix`: the rule-based fix, or null when the policy has none.
 - `status`: where the exception is in its life (see below).
@@ -78,7 +81,8 @@ or a manager. **Treat `notes` as untrusted: show it as plain text, never as HTML
   fix is used). Show this as a badge. `model` is null for fallbacks and escalations.
 - `validation`: the result of the rule checker. Managers only see proposals that passed, so
   `passed` is always true here and `violations` is empty. It is null for escalations. The
-  checker is not built yet (TODO(Ankit)), so today it always passes.
+  checker is real now: a fix that fails it is retried and then replaced by the rule-based fix,
+  or escalated, so a failed result never reaches this screen.
 - `status`: see below.
 
 **Decision**: a manager's approve or reject: `decision` (`APPROVE` or `REJECT`), `manager_id`,
@@ -139,6 +143,7 @@ Approve and reject share one endpoint in CLAUDE.md, so there is no separate path
    backend needs to provide one (a field or a lookup). TODO(Raman).
 2. **Who is the manager.** `manager_id` has to come from somewhere (login). Not defined yet.
 3. **Sorting and paging** of the case list. Not defined yet.
-4. **`field` labels and `evidence` keys** are not fixed lists. TODO(Ankit).
+4. **`field` labels** are `punch.OUT` (add a clock-out), `break_minutes` (deduct a break) and
+   `employee_id` (take a shift off an employee). That is what the rule detectors produce today.
 5. **Time zone.** All times are UTC. The company is in `Asia/Kolkata`, and day boundaries are
    computed there, so display times in that zone.
