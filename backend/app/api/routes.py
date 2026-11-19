@@ -59,7 +59,11 @@ from app.validator import validate_proposal
 from .errors import ApiError
 
 router = APIRouter(prefix="/api")
-Conn = Annotated[psycopg.Connection, Depends(get_conn)]
+# scope="function": the commit (the code after `yield` in get_conn) runs when the handler
+# returns, BEFORE the response is sent. With the default scope it runs after the response, and
+# a client could read "201 Created" and then get a 404 for what it just wrote.
+# (tests/integration/test_commit_before_response.py). Needs FastAPI 0.121 or newer.
+Conn = Annotated[psycopg.Connection, Depends(get_conn, scope="function")]
 CaseStatus = Literal["OPEN", "PROPOSED", "ESCALATED", "RESOLVED"]
 MAX_ANALYSIS_TIMECARDS = 200  # one request analyses at most this many timecards
 

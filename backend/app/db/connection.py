@@ -45,7 +45,8 @@ def init_schema(conn: psycopg.Connection) -> None:
 def get_conn() -> Iterator[psycopg.Connection]:
     """FastAPI dependency: one connection and ONE transaction per request.
 
-    Committed when the handler returns, rolled back if it raises, so a decision and the
+    Committed when the handler returns (before the response is sent, see `Conn` in api/routes.py),
+    rolled back if it raises, so a decision and the
     timecard change it causes are saved together or not at all. Nothing is kept in memory
     between requests, so any number of app copies can run side by side.
     """
