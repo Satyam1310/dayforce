@@ -32,6 +32,7 @@ class AISettings:
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     max_llm_calls: int = 2  # shared budget per proposal, whatever the failure cause
     total_deadline_seconds: float = 25.0  # wall-clock limit for all LLM work per proposal
+    llm_max_rpm: int = 5  # real model calls per minute, per process (0 = no limit); see guard.py
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> AISettings:
@@ -52,6 +53,7 @@ class AISettings:
             retriever=e.get("RETRIEVER", "memory"),
             database_url=e.get("DATABASE_URL", ""),
             embedding_model=e.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
+            llm_max_rpm=int(e.get("LLM_MAX_RPM", "5")),
         )
 
     @property
