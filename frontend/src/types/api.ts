@@ -152,13 +152,19 @@ export interface AuditEvent {
 
 // GET /exceptions/{id} returns "one exception with its timecard, proposal and
 // validation" (CLAUDE.md section 9). The exact JSON shape is not fixed yet;
-// this is our assumption. Harsh's draft in docs/frontend-mock/types.ts
-// (CaseDetail) has the same fields plus audit_events. Confirm with Raman.
+// GET /api/cases/{id} returns CaseDetail (docs/frontend-mock/types.ts, backend/API.md).
 export interface ExceptionDetail {
   exception: DetectedException
   timecard: Timecard
   proposal: Proposal | null
   decision?: Decision | null // the manager's decision, once there is one
+  audit_events?: AuditEvent[]
+}
+
+// GET /api/cases returns CaseListItem[]
+export interface CaseListItem {
+  exception: DetectedException
+  proposal?: Proposal | null
 }
 
 // Body for POST /proposals/{id}/decision

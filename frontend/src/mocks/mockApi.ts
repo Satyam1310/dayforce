@@ -104,13 +104,25 @@ export const mockApi: Api = {
     return clone(proposal)
   },
 
-  async decide(proposalId, body) {
+  // Same rules as POST /api/cases/{id}/approve and /reject (backend/API.md).
+  async decide(caseId, body) {
     await delay()
-    const proposal = db.proposals.find((p) => p.id === proposalId) ?? notFound('Proposal', proposalId)
-    if (proposal.status !== 'PENDING_REVIEW') {
-      throw new ApiError(409, 'PROPOSAL_NOT_PENDING', `Proposal is already ${proposal.status}.`, `mock-${newId()}`)
+    const exception = db.exceptions.find((e) => e.id === caseId) ?? notFound('Case', caseId)
+    const proposal = latestProposalFor(caseId)
+    const fail = (code: string, message: string): never => {
+      throw new ApiError(409, code, message, `mock-${newId()}`)
     }
-    const exception = db.exceptions.find((e) => e.id === proposal.exception_id)
+    if (exception.status === 'ESCALATED' || proposal?.status === 'ESCALATED') {
+      fail('CASE_ESCALATED', 'This case is escalated: there is nothing to approve.')
+    }
+    if (!proposal) return fail('NO_PROPOSAL', 'This case has no proposal yet.')
+    if (proposal.status !== 'PENDING_REVIEW') {
+      fail('ALREADY_DECIDED', `The proposal for this case is already ${proposal.status}.`)
+    }
+    if (body.decision === 'REJECT' && !body.comment?.trim()) {
+      throw new ApiError(422, 'COMMENT_REQUIRED', 'A comment is required to reject.', `mock-${newId()}`)
+    }
+    const proposalId = proposal.id
 
     const decision: Decision = {
       id: newId(),
@@ -150,7 +162,7 @@ export const mockApi: Api = {
         payload: { exception_id: exception.id, action: proposal.fix.action, changes: proposal.fix.changes.length },
       })
     }
-    return clone(decision)
+    return mockApi.getExceptionDetail(caseId)
   },
 
   async listAudit(entityId) {

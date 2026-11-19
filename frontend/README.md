@@ -56,6 +56,9 @@ src/
 - Timecard `notes` are untrusted and rendered as plain text with a label saying so.
 - All times are shown in Asia/Kolkata, whatever the browser's timezone.
 
-## Open question for the backend
+## Backend API
 
-`GET /exceptions/{id}` is assumed to return `{ exception, timecard, proposal }` (see `ExceptionDetail` in `src/types/api.ts`). Confirm the shape with Raman.
+The real client (`src/api/http.ts`) calls the endpoints in `backend/API.md`:
+`GET /api/cases`, `GET /api/cases/{id}`, `POST /api/cases/{id}/propose`,
+`POST /api/cases/{id}/approve`, `POST /api/cases/{id}/reject`, `GET /api/audit`.
+A case id is the exception id. The mock API (`src/mocks/mockApi.ts`) follows the same rules.
