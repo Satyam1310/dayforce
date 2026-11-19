@@ -4,9 +4,11 @@ up:
 down:
 	@docker compose -f infra/docker/docker-compose.yml down
 k8s-up:
-	@echo "TODO: Satyam"
+	@kubectl apply -k infra/k8s/overlays/local
+	@kubectl -n dayforce-local rollout status deployment/postgres
+	@kubectl -n dayforce-local rollout status deployment/frontend
 k8s-down:
-	@echo "TODO: Satyam"
+	@kubectl -n dayforce-local scale deployment/frontend deployment/postgres --replicas=0
 openapi:
 	@echo "TODO: Satyam"
 test:
