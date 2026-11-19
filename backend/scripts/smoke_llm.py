@@ -15,8 +15,8 @@ failure: the workflow falls back to the rule-based fix, and the report counts it
 
 The API key is never printed or written: only provider and model name appear in output.
 
-The three non-fixture exceptions are hand-built stand-ins made from the contract models.
-TODO(Ankit): replace them with exceptions produced by the real detectors once they exist.
+The three non-fixture cases use hand-made timecards ('hand-built' in the report). Their
+exceptions are not typed by hand: they come from the real detectors.
 """
 
 from __future__ import annotations
@@ -34,20 +34,18 @@ from pathlib import Path
 from app.ai.llm import LLM, LLMError, build_llm
 from app.ai.retrieval import Retriever, get_retriever
 from app.ai.settings import AISettings
-from app.ai.workflow import Validator, always_pass_validator, run_workflow
+from app.ai.workflow import Validator, run_workflow
 from app.contracts import (
     DetectedException,
     ExceptionType,
-    FieldChange,
-    Fix,
-    FixAction,
     PolicyConfig,
     Punch,
     PunchType,
-    Severity,
     Shift,
     Timecard,
 )
+from app.domain.rules import RULE_MEAL_BREAK, RULE_OVERLAP, RULE_WEEKLY_OT, detect_exceptions
+from app.validator import validate_proposal
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 FIXTURES = BACKEND_DIR / "app" / "contracts" / "fixtures"
@@ -91,42 +89,71 @@ def fixture_case() -> tuple[DetectedException, Timecard]:
     return exc, tc
 
 
-def overtime_risk_case() -> tuple[DetectedException, Timecard]:
-    tc = Timecard(
-        id="11111111-1111-4111-8111-000000000012",
+def _pick(excs: list[DetectedException], kind: ExceptionType, rule: str) -> DetectedException:
+    return next(e for e in excs if e.type is kind and e.evidence.get("rule") == rule)
+
+
+def _day(day: int, key: str, *, with_break: bool = True, out=(17, 30)) -> Timecard:
+    """A worked day: in at 09:00, out at 17:30 (8 paid hours when a 30 minute break is logged)."""
+    punches = [
+        Punch(id=f"p-{key}-in", employee_id=EMP, type=PunchType.IN, timestamp=_dt(day, 9)),
+        Punch(id=f"p-{key}-out", employee_id=EMP, type=PunchType.OUT, timestamp=_dt(day, *out)),
+    ]
+    if with_break:
+        punches += [
+            Punch(
+                id=f"p-{key}-bs",
+                employee_id=EMP,
+                type=PunchType.BREAK_START,
+                timestamp=_dt(day, 13),
+            ),
+            Punch(
+                id=f"p-{key}-be",
+                employee_id=EMP,
+                type=PunchType.BREAK_END,
+                timestamp=_dt(day, 13, 30),
+            ),
+        ]
+    return Timecard(
+        id=f"11111111-1111-4111-8111-0000000001{day:02d}",
         employee_id=EMP,
-        work_date=date(2026, 3, 12),
-        punches=[
-            Punch(id="p-ot-in", employee_id=EMP, type=PunchType.IN, timestamp=_dt(12, 9)),
-            Punch(id="p-ot-out", employee_id=EMP, type=PunchType.OUT, timestamp=_dt(12, 18)),
-        ],
+        work_date=date(2026, 3, day),
+        punches=punches,
         shifts=[
             Shift(
-                id="s-ot-fri",
+                id=f"s-{key}",
                 employee_id=EMP,
-                start=_dt(13, 9),
-                end=_dt(13, 18),
+                start=_dt(day, 9),
+                end=_dt(day, 17, 30),
                 location_id="loc-pune-01",
             )
         ],
         notes=None,
     )
-    exc = DetectedException(
-        id="55555555-5555-4555-8555-000000000012",
-        type=ExceptionType.OVERTIME_RISK,
-        severity=Severity.MEDIUM,
+
+
+def overtime_risk_case() -> tuple[DetectedException, Timecard]:
+    """Mon-Thu worked 8 paid hours each, plus an 8 hour shift on Friday: 40 projected."""
+    worked = [_day(d, f"d{d}") for d in (9, 10, 11, 12)]
+    friday = Timecard(
+        id="11111111-1111-4111-8111-000000000113",
         employee_id=EMP,
-        timecard_id=tc.id,
-        work_date=tc.work_date,
-        evidence={"worked_hours": 31.5, "remaining_scheduled_hours": 8.0, "projected_hours": 39.5},
-        policy_refs=["POL-TA-04", "POL-TA-03"],
-        baseline_fix=Fix(
-            action=FixAction.REASSIGN_SHIFT,
-            changes=[FieldChange(target_id="s-ot-fri", field="employee_id", old=EMP, new=None)],
-        ),
-        status="OPEN",
+        work_date=date(2026, 3, 13),
+        punches=[],
+        shifts=[
+            Shift(
+                id="s-ot-fri",
+                employee_id=EMP,
+                start=_dt(13, 9),
+                end=_dt(13, 17),
+                location_id="loc-pune-01",
+            )
+        ],
+        notes=None,
     )
-    return exc, tc
+    week = [*worked, friday]
+    exc = _pick(detect_exceptions(week), ExceptionType.OVERTIME_RISK, RULE_WEEKLY_OT)
+    return exc, next(t for t in week if t.id == exc.timecard_id)
 
 
 def schedule_conflict_case() -> tuple[DetectedException, Timecard]:
@@ -153,60 +180,13 @@ def schedule_conflict_case() -> tuple[DetectedException, Timecard]:
         ],
         notes=None,
     )
-    exc = DetectedException(
-        id="55555555-5555-4555-8555-000000000013",
-        type=ExceptionType.SCHEDULE_CONFLICT,
-        severity=Severity.HIGH,
-        employee_id=EMP,
-        timecard_id=tc.id,
-        work_date=tc.work_date,
-        evidence={"shift_a": "s-a", "shift_b": "s-b", "overlap_hours": 2.0},
-        policy_refs=["POL-TA-05"],
-        baseline_fix=Fix(
-            action=FixAction.REASSIGN_SHIFT,
-            changes=[FieldChange(target_id="s-b", field="employee_id", old=EMP, new=None)],
-        ),
-        status="OPEN",
-    )
-    return exc, tc
+    return _pick(detect_exceptions([tc]), ExceptionType.SCHEDULE_CONFLICT, RULE_OVERLAP), tc
 
 
 def policy_breach_case() -> tuple[DetectedException, Timecard]:
-    tc = Timecard(
-        id="11111111-1111-4111-8111-000000000014",
-        employee_id=EMP,
-        work_date=date(2026, 3, 14),
-        punches=[
-            Punch(id="p-br-in", employee_id=EMP, type=PunchType.IN, timestamp=_dt(14, 9)),
-            Punch(id="p-br-out", employee_id=EMP, type=PunchType.OUT, timestamp=_dt(14, 17, 30)),
-        ],
-        shifts=[
-            Shift(
-                id="s-br",
-                employee_id=EMP,
-                start=_dt(14, 9),
-                end=_dt(14, 17, 30),
-                location_id="loc-pune-01",
-            )
-        ],
-        notes=None,
-    )
-    exc = DetectedException(
-        id="55555555-5555-4555-8555-000000000014",
-        type=ExceptionType.POLICY_BREACH,
-        severity=Severity.LOW,
-        employee_id=EMP,
-        timecard_id=tc.id,
-        work_date=tc.work_date,
-        evidence={"shift_hours": 8.5, "break_minutes_logged": 0, "rule": "meal break"},
-        policy_refs=["POL-TA-02"],
-        baseline_fix=Fix(
-            action=FixAction.DEDUCT_BREAK,
-            changes=[FieldChange(target_id=tc.id, field="break_minutes", old=None, new="30")],
-        ),
-        status="OPEN",
-    )
-    return exc, tc
+    """A 8.5 hour day with no break logged: a meal break breach."""
+    tc = _day(14, "br", with_break=False)
+    return _pick(detect_exceptions([tc]), ExceptionType.POLICY_BREACH, RULE_MEAL_BREAK), tc
 
 
 def injection_case() -> tuple[DetectedException, Timecard]:
@@ -392,7 +372,7 @@ def run_all(
     *,
     retriever: Retriever,
     llm: LLM,
-    validator: Validator = always_pass_validator,
+    validator: Validator = validate_proposal,
     cfg: PolicyConfig | None = None,
     settings: AISettings,
     limiter: RateLimiter | None = None,
@@ -463,7 +443,7 @@ def run_model(
     retriever: Retriever,
     cases: list[Case],
     limiter: RateLimiter | None = None,
-    validator: Validator = always_pass_validator,
+    validator: Validator = validate_proposal,
 ) -> ModelRun:
     """Run the whole suite for one model name. The limiter is shared across models so the
     request rate stays under the limit for the whole script, not per model."""
@@ -513,7 +493,7 @@ def render_report(
         f"- Provider: `{provider}`",
         f"- Models: {', '.join(names)}",
         f"- Retriever: `{retriever}`",
-        "- Validator: always-pass placeholder. TODO(Ankit): real `validate_proposal`.",
+        "- Validator: the real `validate_proposal` (rule checks on every fix).",
     ]
     if provider != "mock" and max_rpm:
         lines.append(

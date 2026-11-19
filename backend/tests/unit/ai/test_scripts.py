@@ -8,6 +8,7 @@ from app.ai.llm import MockLLM
 from app.ai.retrieval import InMemoryRetriever
 from app.ai.settings import AISettings
 from scripts import demo_flow, smoke_llm
+from tests.unit.ai.helpers import pass_validator
 
 S = AISettings()
 
@@ -123,7 +124,7 @@ def test_describe_event_covers_every_event_type():
             tc,
             retriever=InMemoryRetriever(),
             llm=MockLLM(mode),
-            validator=demo_flow.always_pass_validator,
+            validator=pass_validator,
             cfg=PolicyConfig(),
             settings=s,
         )
@@ -138,7 +139,7 @@ def test_describe_event_covers_every_event_type():
         tc,
         retriever=InMemoryRetriever(text="## POL-TA-01 X\n\nunrelated words"),
         llm=MockLLM(),
-        validator=demo_flow.always_pass_validator,
+        validator=pass_validator,
         cfg=PolicyConfig(),
         settings=s,
     )

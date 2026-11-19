@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from app.ai.llm import build_llm
 from app.ai.retrieval import get_retriever
 from app.ai.settings import AISettings
-from app.ai.workflow import Validator, always_pass_validator, run_workflow
+from app.ai.workflow import run_workflow
 from app.contracts import (
     AuditEvent,
     Decision,
@@ -40,6 +40,7 @@ from app.db.connection import get_conn
 from app.db.seed import load_seed
 from app.observability.metrics import DECISIONS, PROPOSALS
 from app.services.apply_fix import FixNotApplicable, apply_fix
+from app.validator import validate_proposal
 
 from .errors import ApiError
 
@@ -97,15 +98,6 @@ def _audit(
         entity_id=entity_id,
         payload=payload,
     )
-
-
-def _validator() -> Validator:
-    """Ankit's validate_proposal when it exists, else the AI module's pass-through."""
-    try:
-        from app.validator import validate_proposal  # type: ignore[attr-defined]
-    except ImportError:
-        return always_pass_validator
-    return validate_proposal
 
 
 def _get_case(conn: psycopg.Connection, case_id: str, *, lock: bool = False) -> DetectedException:
@@ -184,7 +176,7 @@ def propose(conn: Conn, case_id: str) -> Proposal:
         tc,
         retriever=get_retriever(settings),
         llm=build_llm(settings),
-        validator=_validator(),
+        validator=validate_proposal,  # the real rule checker (app/validator)
         cfg=PolicyConfig(),
         settings=settings,
     )

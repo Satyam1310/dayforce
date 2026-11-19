@@ -26,7 +26,8 @@ There are four exception types: `MISSED_PUNCH`, `OVERTIME_RISK`, `SCHEDULE_CONFL
 | AI module: LLM client, mock LLM, retrieval, prompts, workflow, fallback, escalation | Built (`backend/app/ai/`) |
 | pgvector retriever and policy ingest | Built, tested against a real `pgvector/pgvector:pg16` container |
 | Smoke script and demo script | Built, tested with the mock LLM only (`backend/scripts/`) |
-| Detectors (rules), validator, seed data | `TODO(Ankit)`: not on `main` |
+| Detectors (all four exception types) and the validator | Built and unit tested (`backend/app/domain/rules/`, `backend/app/validator/`). Written by Harsh because those folders were empty, so `TODO(Ankit)`: review them |
+| Seed dataset (at least 60 timecards plus ground truth) | `TODO(Ankit)`: not on `main` |
 | FastAPI app, Postgres schema, approval and audit endpoints, `/health`, `/metrics` | `TODO(Raman)`: not on `main` |
 | React screens | `TODO(Priyanshu)`: not on `main` |
 | Docker, compose, Kubernetes, CI/CD | `TODO(Satyam)`: not on `main` (`.github/workflows/` and `infra/` are empty) |
@@ -41,13 +42,13 @@ One Python backend (a modular monolith). Modules call each other as plain functi
 
 ```
  timecards ──► detectors ──► DetectedException ──► generate_proposal ──► Proposal (PENDING_REVIEW | ESCALATED)
-              TODO(Ankit)     (contract)            backend/app/ai        + list of AuditEvents
+         backend/app/domain   (contract)            backend/app/ai        + list of AuditEvents
                                                           │
                                   ┌───────────────────────┼──────────────────────┐
                                   ▼                       ▼                      ▼
                              retriever               LLM client             validator
-                       memory | pgvector      OpenAI-compatible | mock   TODO(Ankit); today an
-                                                                          always-pass placeholder
+                       memory | pgvector      OpenAI-compatible | mock   backend/app/validator
+                                                                          (real rule checks)
 
  Proposal ──► store, manager Approve/Reject, apply fix on APPROVE, audit trail   TODO(Raman), TODO(Priyanshu)
 ```
@@ -77,10 +78,10 @@ says where it lives and whether it exists yet.
 
 | Control | What it does | State |
 |---|---|---|
-| Deterministic detection | Plain code finds the problem; no AI in detection | `TODO(Ankit)`. The smoke and demo scripts use the fixture exception plus three hand-built ones |
+| Deterministic detection | Plain code finds the problem; no AI in detection | Built (`backend/app/domain/rules/`). The smoke, demo and mock-data scripts now take their exceptions from it |
 | Typed output | The model may only return `LLMProposal` (fix, rationale of at most 400 characters, cited clause ids, confidence between 0 and 1). Anything else is rejected | Built |
 | Citation check | Every cited id must be among the clauses actually retrieved above the threshold. At least one citation is required. Quotes on the final `Proposal` are copied from the retrieved text, never from model output | Built |
-| Validator | Applies the proposed fix to a copy of the timecard and re-runs the rules | `TODO(Ankit)`. Today `always_pass_validator` passes everything, **so no proposal is rule-validated yet** |
+| Validator | Applies the proposed fix to a copy of the timecard and re-runs the rules | Built (`backend/app/validator/`) and used by default in `generate_proposal`. Every proposal a manager can approve has passed it |
 | Fallback | If the model fails, use the exception's rule-based `baseline_fix` (source `RULES_FALLBACK`). The baseline also goes through the validator | Built |
 | Escalation | No matching policy, no baseline fix, baseline fails validation, or low confidence: return a `FLAG_FOR_MANAGER` fix with no changes and status `ESCALATED` | Built |
 | Human decision | Only a manager's Approve/Reject changes a timecard | `TODO(Raman)`, `TODO(Priyanshu)`. The AI module never writes anywhere |
@@ -238,7 +239,7 @@ Scaling down for limited resources (works today):
 
 | Item | Owner | Note |
 |---|---|---|
-| The four detectors, the validator, seed data (at least 60 timecards plus ground truth) | `TODO(Ankit)` | The validator is wired in as `always_pass_validator` until it exists. When it lands, pass it as `validator` to `run_workflow` and as the default in `generate_proposal`, and add an integration test |
+| Seed data (at least 60 timecards plus ground truth) | `TODO(Ankit)` | The detectors and validator exist but have only been tested on small hand-made cases, not on a seed set |
 | FastAPI app, DB schema and queries, decision and audit endpoints, `/health`, `/metrics`, `docs/openapi.yaml`, shared connection pool | `TODO(Raman)` | The workflow's events are returned, not stored |
 | Manager screens | `TODO(Priyanshu)` | |
 | Dockerfiles, compose, Kubernetes manifests, CI/CD, probes, HPA | `TODO(Satyam)` | No CI runs today. The pgvector integration tests need a Postgres service in CI |
@@ -319,9 +320,12 @@ spec lists LangGraph, so a LangGraph version is on the list. The behaviour shoul
 the existing tests would be reused to check that.
 
 **9. What does the validator do today?**
-Nothing useful yet. It is Ankit's module and is not merged, so the workflow uses a placeholder
-that passes everything. Today no proposal is checked by rules. The design is for it to apply
-the fix to a copy of the timecard and re-run the rules.
+It applies the proposed fix to a copy of the timecard and re-runs the real detectors on the
+copy. It rejects a fix that is the wrong kind for the exception, touches data outside it, makes
+a shift longer than 12 hours, breaks the 10 hour rest rule, deducts the wrong amount of break,
+leaves the problem in place, or creates a new violation. It only sees one timecard, so rest
+against neighbouring days and later shifts are checked from facts the detector stored in the
+exception. It is unit tested, but it has not been measured on a seed dataset yet.
 
 **10. How would this scale to a large company?**
 The workflow is stateless, so backend replicas behind a Service with an HPA is the plan, plus
@@ -353,6 +357,6 @@ of the AI module pull requests is still to do.
 
 **15. What is the biggest risk, and what would you do next?**
 That we have not yet run a real model, so we do not know its JSON-valid, citation-valid and
-fallback rates. Next: run the smoke script with the real model, integrate Ankit's validator
+fallback rates. Next: run the smoke script with the real model, review the validator and detectors with Ankit
 and Raman's API so the flow runs end to end, then measure detection and proposal quality on
 the seed set (Pranav's evaluation).
