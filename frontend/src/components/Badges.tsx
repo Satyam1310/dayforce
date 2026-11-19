@@ -1,10 +1,5 @@
 import { humanize } from '../lib/format'
-import type {
-  ExceptionStatus,
-  ProposalSource,
-  ProposalStatus,
-  Severity,
-} from '../types/api'
+import type { ExceptionStatus, ProposalSource, ProposalStatus, Severity } from '../types/api'
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   return <span className={`badge sev-${severity.toLowerCase()}`}>{humanize(severity)}</span>
@@ -21,7 +16,10 @@ export function SourceBadge({ source }: { source: ProposalSource }) {
       AI suggestion
     </span>
   ) : (
-    <span className="badge source-fallback" title="The AI could not give a valid fix, so the rule-based fix is shown">
+    <span
+      className="badge source-fallback"
+      title="The AI could not give a valid fix, so the rule-based fix is shown"
+    >
       Rule-based fallback
     </span>
   )

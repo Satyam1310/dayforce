@@ -9,3 +9,4 @@ pytest-cov
 ruff
 python-dotenv
 prometheus-client
+pyyaml

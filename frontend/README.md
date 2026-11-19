@@ -30,11 +30,11 @@ and restart `npm run dev`. Vite proxies `/api` to `http://localhost:8000`.
 
 ## Screens
 
-| Route | What it shows |
-|---|---|
-| `/exceptions` | All exceptions, filter by type and status, severity badge, escalated rows marked |
+| Route             | What it shows                                                                                                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/exceptions`     | All exceptions, filter by type and status, severity badge, escalated rows marked                                                                                                                                   |
 | `/exceptions/:id` | Evidence, timecard timeline (shifts vs punches, proposed punch dashed), proposed fix before/after, rationale, cited policy clause, validator result, AI / rule-based badge, Approve / Reject with comment, history |
-| `/audit` | Audit trail, filter by entity ID |
+| `/audit`          | Audit trail, filter by entity ID                                                                                                                                                                                   |
 
 ## Code map
 

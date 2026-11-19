@@ -31,11 +31,7 @@ export interface Timecard {
   notes: string | null // UNTRUSTED text: always shown as plain text
 }
 
-export type ExceptionType =
-  | 'MISSED_PUNCH'
-  | 'OVERTIME_RISK'
-  | 'SCHEDULE_CONFLICT'
-  | 'POLICY_BREACH'
+export type ExceptionType = 'MISSED_PUNCH' | 'OVERTIME_RISK' | 'SCHEDULE_CONFLICT' | 'POLICY_BREACH'
 
 export const EXCEPTION_TYPES: ExceptionType[] = [
   'MISSED_PUNCH',
@@ -47,12 +43,7 @@ export const EXCEPTION_TYPES: ExceptionType[] = [
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH'
 
 export type FixAction =
-  | 'ADD_PUNCH'
-  | 'EDIT_PUNCH'
-  | 'DEDUCT_BREAK'
-  | 'REASSIGN_SHIFT'
-  | 'FLAG_FOR_MANAGER'
-  | 'NO_CHANGE'
+  'ADD_PUNCH' | 'EDIT_PUNCH' | 'DEDUCT_BREAK' | 'REASSIGN_SHIFT' | 'FLAG_FOR_MANAGER' | 'NO_CHANGE'
 
 export interface FieldChange {
   target_id: string
@@ -68,12 +59,7 @@ export interface Fix {
 
 export type ExceptionStatus = 'OPEN' | 'PROPOSED' | 'ESCALATED' | 'RESOLVED'
 
-export const EXCEPTION_STATUSES: ExceptionStatus[] = [
-  'OPEN',
-  'PROPOSED',
-  'ESCALATED',
-  'RESOLVED',
-]
+export const EXCEPTION_STATUSES: ExceptionStatus[] = ['OPEN', 'PROPOSED', 'ESCALATED', 'RESOLVED']
 
 export interface DetectedException {
   id: string
@@ -107,11 +93,7 @@ export interface ValidationResult {
 
 export type ProposalSource = 'LLM' | 'RULES_FALLBACK'
 
-export type ProposalStatus =
-  | 'PENDING_REVIEW'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'ESCALATED'
+export type ProposalStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'ESCALATED'
 
 export interface Proposal {
   id: string

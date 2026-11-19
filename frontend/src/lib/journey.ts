@@ -41,14 +41,22 @@ export function buildJourney(
 
   const top = proposal.citations[0]
   const policy: Step = top
-    ? { title: 'Policy matched', detail: `${top.clause_id}, ${formatPercent(top.score)} match`, state: 'done' }
+    ? {
+        title: 'Policy matched',
+        detail: `${top.clause_id}, ${formatPercent(top.score)} match`,
+        state: 'done',
+      }
     : { title: 'Policy matched', detail: 'No clause close enough', state: 'warn' }
 
   const escalated = proposal.status === 'ESCALATED'
   const fix: Step = escalated
     ? { title: 'Fix proposed', detail: 'No safe fix, escalated', state: 'blocked' }
     : proposal.source === 'LLM'
-      ? { title: 'Fix proposed', detail: `AI, ${formatPercent(proposal.confidence)} confident`, state: 'done' }
+      ? {
+          title: 'Fix proposed',
+          detail: `AI, ${formatPercent(proposal.confidence)} confident`,
+          state: 'done',
+        }
       : { title: 'Fix proposed', detail: 'AI unusable, rule-based fix', state: 'warn' }
 
   const validation = proposal.validation
@@ -56,7 +64,11 @@ export function buildJourney(
     ? { title: 'Validator', detail: 'Nothing to check', state: 'idle' }
     : validation.passed
       ? { title: 'Validator', detail: 'Passed', state: 'done' }
-      : { title: 'Validator', detail: `${validation.violations.length} problems found`, state: 'blocked' }
+      : {
+          title: 'Validator',
+          detail: `${validation.violations.length} problems found`,
+          state: 'blocked',
+        }
 
   const who = decision ? ` by ${decision.manager_id}` : ''
   const human: Step =

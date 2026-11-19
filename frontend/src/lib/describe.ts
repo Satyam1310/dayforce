@@ -30,7 +30,8 @@ export function describeValue(value: unknown, timecard?: Timecard): string {
   if (typeof value === 'string' && UUID.test(value)) {
     if (timecard) {
       const shift = timecard.shifts.find((s) => s.id === value)
-      if (shift) return `Shift ${formatTime(shift.start)}–${formatTime(shift.end)}, ${shift.location_id}`
+      if (shift)
+        return `Shift ${formatTime(shift.start)}–${formatTime(shift.end)}, ${shift.location_id}`
       const punch = timecard.punches.find((p) => p.id === value)
       if (punch) return `${humanize(punch.type)} punch at ${formatTime(punch.timestamp)}`
       if (value === timecard.employee_id) return `Employee ${shortId(value)}`

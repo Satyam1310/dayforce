@@ -12,7 +12,8 @@ export function summarize(e: DetectedException): string {
   switch (e.type) {
     case 'MISSED_PUNCH': {
       const inAt = isIsoDateTime(ev.clock_in) ? formatTime(ev.clock_in) : null
-      if (inAt && ev.scheduled_shift_end === null) return `Clocked in at ${inAt}, no clock-out, no shift scheduled`
+      if (inAt && ev.scheduled_shift_end === null)
+        return `Clocked in at ${inAt}, no clock-out, no shift scheduled`
       return inAt ? `Clocked in at ${inAt}, no clock-out` : 'Clock-in without a clock-out'
     }
     case 'OVERTIME_RISK': {
@@ -29,7 +30,8 @@ export function summarize(e: DetectedException): string {
     case 'POLICY_BREACH': {
       const worked = num(ev.worked_hours)
       const rest = num(ev.rest_hours)
-      if (ev.rule === 'MISSING_BREAK' && worked !== null) return `${worked} h shift with no break logged`
+      if (ev.rule === 'MISSING_BREAK' && worked !== null)
+        return `${worked} h shift with no break logged`
       if (ev.rule === 'MIN_REST' && rest !== null) return `Only ${rest} h rest between shifts`
       const clause = POLICY_CLAUSES[e.policy_refs[0] ?? '']
       return clause ? `${clause.title} rule broken` : 'Company policy broken'

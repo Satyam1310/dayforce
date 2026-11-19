@@ -41,7 +41,9 @@ function ProposalCell({ proposal }: { proposal: Proposal | null | undefined }) {
   switch (proposal.status) {
     case 'PENDING_REVIEW':
       return proposal.source === 'LLM' ? (
-        <span className="fix-cell is-ready">AI fix ready, {formatPercent(proposal.confidence)}</span>
+        <span className="fix-cell is-ready">
+          AI fix ready, {formatPercent(proposal.confidence)}
+        </span>
       ) : (
         <span className="fix-cell is-ready">Rule-based fix ready</span>
       )
