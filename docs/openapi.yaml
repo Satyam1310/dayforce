@@ -106,6 +106,132 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/analysis/run:
+    post:
+      tags:
+      - analysis
+      summary: Run Analysis
+      description: 'Run the rule detectors (plain code, no AI) over the timecards, save the timecards
+        and
+
+        every exception found as new OPEN cases, and write audit events. Timecard ids that already
+
+        exist are refused (409) so a repeat call cannot create duplicate cases.'
+      operationId: run_analysis_api_analysis_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/timecards:
+    get:
+      tags:
+      - timecards
+      summary: List Timecards
+      operationId: list_timecards_api_timecards_get
+      parameters:
+      - name: employee_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Employee Id
+      - name: week
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          description: any date; returns that Monday-to-Sunday week
+          title: Week
+        description: any date; returns that Monday-to-Sunday week
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 200
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Timecard'
+                title: Response List Timecards Api Timecards Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/policies/search:
+    get:
+      tags:
+      - policies
+      summary: Search Policies
+      description: 'Debug view of retrieval: the clauses (with scores) the AI would be shown for this
+        text.
+
+        Scores are not filtered by the minimum-relevance threshold.'
+      operationId: search_policies_api_policies_search_get
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 300
+          title: Q
+      - name: k
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10
+          minimum: 1
+          default: 3
+          title: K
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PolicyCitation'
+                title: Response Search Policies Api Policies Search Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/cases/{case_id}/propose:
     post:
       tags:
@@ -263,6 +389,37 @@ paths:
               schema: {}
 components:
   schemas:
+    AnalysisRequest:
+      properties:
+        timecards:
+          items:
+            $ref: '#/components/schemas/Timecard'
+          type: array
+          maxItems: 200
+          minItems: 1
+          title: Timecards
+      type: object
+      required:
+      - timecards
+      title: AnalysisRequest
+      description: 'Timecards for one analysis. Send every timecard of the people and week you want checked
+
+        together: weekly overtime and minimum rest need the neighbouring days.'
+    AnalysisResult:
+      properties:
+        timecards_saved:
+          type: integer
+          title: Timecards Saved
+        cases:
+          items:
+            $ref: '#/components/schemas/CaseListItem'
+          type: array
+          title: Cases
+      type: object
+      required:
+      - timecards_saved
+      - cases
+      title: AnalysisResult
     ApproveRequest:
       properties:
         manager_id:
