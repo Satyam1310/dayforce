@@ -43,8 +43,8 @@ use into the system temp directory. Cache it between runs, for example with
 `actions/cache` on the folder `${{ runner.temp }}/fastembed_cache`, and set
 `FASTEMBED_CACHE_PATH` to it. Without a cache the first run is slower (download time not measured).
 
-Expected time: whole backend suite with the database about 10 seconds on a laptop
-(`python -m pytest -q`: 381 tests before this work, more now; see the PR for the current count).
+Expected time: whole backend suite with the database about 16 seconds on a laptop
+(`python -m pytest -q`: 430 tests passed in about 16 seconds, with the database).
 
 ## 2. The system test
 
