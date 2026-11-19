@@ -2,6 +2,9 @@
 
     GET  /api/cases                 list cases, filter by status (and type)
     GET  /api/cases/{id}            timecard, exception, proposal, decision, audit events
+    POST /api/analysis/run          timecards in: run the detectors, save timecards + cases
+    GET  /api/timecards             saved timecards, filter by employee_id and week
+    GET  /api/policies/search       debug: which policy clauses a query retrieves (?q=&k=)
     POST /api/cases/{id}/propose    run the AI workflow, save the proposal + its audit events
     POST /api/cases/{id}/approve    manager approves the pending proposal (applies the fix)
     POST /api/cases/{id}/reject     manager rejects it (nothing changes on the timecard)
@@ -16,13 +19,14 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
 import psycopg
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
+from app.ai.guard import guard_llm
 from app.ai.llm import build_llm
 from app.ai.retrieval import get_retriever
 from app.ai.settings import AISettings
@@ -32,6 +36,7 @@ from app.contracts import (
     Decision,
     DetectedException,
     ExceptionType,
+    PolicyCitation,
     PolicyConfig,
     Proposal,
     Timecard,
@@ -39,15 +44,28 @@ from app.contracts import (
 from app.db import repo
 from app.db.connection import get_conn
 from app.db.seed import load_seed
-from app.observability.metrics import DECISIONS, PROPOSALS
+from app.domain.rules import detect_exceptions
+from app.observability.metrics import (
+    ANALYSIS_RUNS,
+    DECISIONS,
+    ESCALATIONS,
+    EXCEPTIONS_DETECTED,
+    PROPOSALS,
+    VALIDATOR_REJECTIONS,
+)
 from app.services.apply_fix import FixNotApplicable, apply_fix
 from app.validator import validate_proposal
 
 from .errors import ApiError
 
 router = APIRouter(prefix="/api")
-Conn = Annotated[psycopg.Connection, Depends(get_conn)]
+# scope="function": the commit (the code after `yield` in get_conn) runs when the handler
+# returns, BEFORE the response is sent. With the default scope it runs after the response, and
+# a client could read "201 Created" and then get a 404 for what it just wrote.
+# (tests/integration/test_commit_before_response.py). Needs FastAPI 0.121 or newer.
+Conn = Annotated[psycopg.Connection, Depends(get_conn, scope="function")]
 CaseStatus = Literal["OPEN", "PROPOSED", "ESCALATED", "RESOLVED"]
+MAX_ANALYSIS_TIMECARDS = 200  # one request analyses at most this many timecards
 
 
 # ---- shapes that group contract models (docs/frontend-mock/types.ts) ---------------------
@@ -74,6 +92,18 @@ class ApproveRequest(BaseModel):
 class RejectRequest(BaseModel):
     manager_id: str = Field(min_length=1, max_length=100)
     comment: str = Field(min_length=1, max_length=1000)  # a rejection must say why
+
+
+class AnalysisRequest(BaseModel):
+    """Timecards for one analysis. Send every timecard of the people and week you want checked
+    together: weekly overtime and minimum rest need the neighbouring days."""
+
+    timecards: list[Timecard] = Field(min_length=1, max_length=MAX_ANALYSIS_TIMECARDS)
+
+
+class AnalysisResult(BaseModel):
+    timecards_saved: int
+    cases: list[CaseListItem]  # the new cases only; clean timecards produce none
 
 
 class SeedResult(BaseModel):
@@ -155,6 +185,96 @@ def list_audit(conn: Conn, entity_id: str | None = None) -> list[AuditEvent]:
     return repo.list_audit(conn, [entity_id] if entity_id else None)
 
 
+# ---- analysis: timecards in, cases out ---------------------------------------------------
+
+
+def _check_timecards(timecards: list[Timecard]) -> None:
+    """Cheap sanity checks before anything is saved. Free text (notes) is not inspected:
+    it is stored as data and never used as an instruction."""
+    ids = [t.id for t in timecards]
+    if len(set(ids)) != len(ids):
+        raise ApiError(422, "DUPLICATE_TIMECARD_IN_REQUEST", "Timecard ids must be unique.")
+    for t in timecards:
+        owners = {p.employee_id for p in t.punches} | {s.employee_id for s in t.shifts}
+        if owners - {t.employee_id}:
+            raise ApiError(
+                422,
+                "EMPLOYEE_MISMATCH",
+                f"Timecard {t.id}: every punch and shift must belong to employee {t.employee_id}.",
+            )
+
+
+@router.post("/analysis/run", response_model=AnalysisResult, status_code=201, tags=["analysis"])
+def run_analysis(conn: Conn, body: AnalysisRequest) -> AnalysisResult:
+    """Run the rule detectors (plain code, no AI) over the timecards, save the timecards and
+    every exception found as new OPEN cases, and write audit events. Timecard ids that already
+    exist are refused (409) so a repeat call cannot create duplicate cases."""
+    _check_timecards(body.timecards)
+    taken = repo.existing_timecard_ids(conn, [t.id for t in body.timecards])
+    if taken:
+        raise ApiError(
+            409, "TIMECARD_EXISTS", f"Timecard already saved: {sorted(taken)[0]} (and maybe more)."
+        )
+
+    found = detect_exceptions(body.timecards, PolicyConfig())
+    events: list[AuditEvent] = []
+    try:
+        for tc in body.timecards:
+            repo.insert_timecard(conn, tc)
+            events.append(
+                _audit("system", "TIMECARD_IMPORTED", "timecard", tc.id, employee_id=tc.employee_id)
+            )
+        for exc in found:
+            repo.insert_exception(conn, exc)
+            events.append(
+                _audit(
+                    "system",
+                    "EXCEPTION_DETECTED",
+                    "exception",
+                    exc.id,
+                    type=exc.type.value,
+                    timecard_id=exc.timecard_id,
+                    rule=exc.evidence.get("rule"),
+                )
+            )
+    except psycopg.errors.UniqueViolation as e:  # two identical calls racing
+        raise ApiError(
+            409, "TIMECARD_EXISTS", "Those timecards were saved by another request."
+        ) from e
+    repo.insert_audit(conn, events)
+
+    ANALYSIS_RUNS.inc()
+    for exc in found:
+        EXCEPTIONS_DETECTED.labels(exc.type.value).inc()
+    return AnalysisResult(
+        timecards_saved=len(body.timecards),
+        cases=[CaseListItem(exception=e) for e in found],
+    )
+
+
+@router.get("/timecards", response_model=list[Timecard], tags=["timecards"])
+def list_timecards(
+    conn: Conn,
+    employee_id: str | None = None,
+    week: Annotated[
+        date | None, Query(description="any date; returns that Monday-to-Sunday week")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[Timecard]:
+    week_start = week - timedelta(days=week.weekday()) if week else None  # weeks start Monday
+    return repo.list_timecards(conn, employee_id=employee_id, week_start=week_start, limit=limit)
+
+
+@router.get("/policies/search", response_model=list[PolicyCitation], tags=["policies"])
+def search_policies(
+    q: Annotated[str, Query(min_length=1, max_length=300)],
+    k: Annotated[int, Query(ge=1, le=10)] = 3,
+) -> list[PolicyCitation]:
+    """Debug view of retrieval: the clauses (with scores) the AI would be shown for this text.
+    Scores are not filtered by the minimum-relevance threshold."""
+    return get_retriever(AISettings.from_env()).retrieve(q, k=k)
+
+
 # ---- propose -----------------------------------------------------------------------------
 
 
@@ -176,7 +296,7 @@ def propose(conn: Conn, case_id: str) -> Proposal:
         exc,
         tc,
         retriever=get_retriever(settings),
-        llm=build_llm(settings),
+        llm=guard_llm(build_llm(settings), settings),  # metrics, and the LLM_MAX_RPM limit
         validator=validate_proposal,  # the real rule checker (app/validator)
         cfg=PolicyConfig(),
         settings=settings,
@@ -187,6 +307,11 @@ def propose(conn: Conn, case_id: str) -> Proposal:
         conn, exc.id, "ESCALATED" if proposal.status == "ESCALATED" else "PROPOSED"
     )
     PROPOSALS.labels(proposal.source.value, proposal.status).inc()
+    for e in events:
+        if e.event_type == "VALIDATION_RESULT" and e.payload.get("passed") is False:
+            VALIDATOR_REJECTIONS.inc()
+        elif e.event_type == "ESCALATED":
+            ESCALATIONS.labels(str(e.payload.get("reason", "UNKNOWN"))).inc()
     return proposal
 
 

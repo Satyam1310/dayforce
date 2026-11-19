@@ -25,12 +25,11 @@ import argparse
 import dataclasses
 import math
 import time
-from collections import deque
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
+from app.ai.guard import RateLimiter  # noqa: F401  (evaluate.py imports it from here)
 from app.ai.llm import LLM, LLMError, build_llm
 from app.ai.retrieval import Retriever, get_retriever
 from app.ai.settings import AISettings
@@ -215,42 +214,6 @@ def build_cases(fixture_runs: int = 10) -> list[Case]:
 # ---------------------------------------------------------------- throttle and call guard
 
 DEFAULT_MAX_RPM = 18  # stays under a 20 requests per minute provider limit, with margin
-
-
-class RateLimiter:
-    """Sliding window: at most `max_calls` calls in any `window` seconds. `acquire()` blocks
-    (sleeps) when the window is full. `slept` is the total time spent waiting, so callers can
-    leave it out of latency and deadline measurements. Clock and sleep are injectable."""
-
-    def __init__(
-        self,
-        max_calls: int,
-        window: float = 60.0,
-        clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
-    ):
-        if max_calls < 1:
-            raise ValueError("max_calls must be at least 1")
-        self.max_calls = max_calls
-        self.window = window
-        self._clock = clock
-        self._sleep = sleep
-        self._stamps: deque[float] = deque()
-        self.slept = 0.0
-
-    def acquire(self) -> None:
-        now = self._clock()
-        while self._stamps and now - self._stamps[0] >= self.window:
-            self._stamps.popleft()
-        if len(self._stamps) >= self.max_calls:
-            oldest = self._stamps.popleft()  # we wait until this call leaves the window
-            wait = oldest + self.window - now
-            self._sleep(wait)
-            self.slept += wait
-            # Never stamp earlier than the moment the oldest call expired, so no window of
-            # `window` seconds can ever hold more than max_calls calls (immune to clock rounding).
-            now = max(self._clock(), oldest + self.window)
-        self._stamps.append(now)
 
 
 @dataclass

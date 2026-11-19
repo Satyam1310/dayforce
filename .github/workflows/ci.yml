@@ -17,6 +17,19 @@ jobs:
     name: Backend - Lint and Test
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: timecards
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d timecards"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,8 +48,10 @@ jobs:
         working-directory: backend
         run: ruff check .
 
-      - name: Run backend tests
+      - name: Run backend tests (with the database)
         working-directory: backend
+        env:
+          DATABASE_URL: postgresql://app:app@localhost:5432/timecards
         run: python -m pytest -q
 
   frontend:

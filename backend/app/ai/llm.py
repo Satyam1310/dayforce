@@ -72,7 +72,7 @@ class OpenAICompatibleLLM:
             raise LLMError(f"{type(e).__name__}: {e}") from e
 
 
-MOCK_MODES = ("ok", "invalid_json", "timeout", "bad_citation", "low_confidence")
+MOCK_MODES = ("ok", "invalid_json", "timeout", "rate_limited", "bad_citation", "low_confidence")
 _EXC_RE = re.compile(r"<exception>\s*(.*?)\s*</exception>", re.DOTALL)
 
 
@@ -91,6 +91,8 @@ class MockLLM:
         self.calls += 1
         if self.mode == "timeout":
             raise LLMTimeout("mock timeout")
+        if self.mode == "rate_limited":
+            raise LLMError("mock provider answered HTTP 429 (rate limited)")
         if self.mode == "invalid_json":
             return "this is not json {"
         m = _EXC_RE.search(user)

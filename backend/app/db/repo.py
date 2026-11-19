@@ -35,8 +35,16 @@ def get_timecard(conn: psycopg.Connection, timecard_id: str) -> Timecard | None:
     return Timecard.model_validate(row["doc"]) if row else None
 
 
+def existing_timecard_ids(conn: psycopg.Connection, ids: list[str]) -> set[str]:
+    rows = conn.execute("SELECT id FROM timecards WHERE id = ANY(%s)", (ids,)).fetchall()
+    return {r["id"] for r in rows}
+
+
 def list_timecards(
-    conn: psycopg.Connection, employee_id: str | None = None, week_start: date | None = None
+    conn: psycopg.Connection,
+    employee_id: str | None = None,
+    week_start: date | None = None,
+    limit: int | None = None,
 ) -> list[Timecard]:
     sql = "SELECT doc FROM timecards WHERE TRUE"
     params: list[object] = []
@@ -46,7 +54,10 @@ def list_timecards(
     if week_start:
         sql += " AND work_date BETWEEN %s AND %s"
         params += [week_start, week_start + timedelta(days=6)]
-    sql += " ORDER BY work_date, employee_id"
+    sql += " ORDER BY work_date, employee_id, id"
+    if limit:
+        sql += " LIMIT %s"
+        params.append(limit)
     return [Timecard.model_validate(r["doc"]) for r in conn.execute(sql, params).fetchall()]
 
 

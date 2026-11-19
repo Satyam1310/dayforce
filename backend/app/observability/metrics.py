@@ -21,6 +21,25 @@ PROPOSALS = Counter(
     "proposals_created_total", "Proposals created by the AI workflow", ["source", "status"]
 )
 DECISIONS = Counter("decisions_total", "Manager decisions", ["decision"])
+# AI safety signals. Proposals by source (LLM or RULES_FALLBACK) are PROPOSALS above.
+VALIDATOR_REJECTIONS = Counter(
+    "validator_rejections_total", "Fixes the validator rejected (LLM fix or rule-based fix)"
+)
+ESCALATIONS = Counter(
+    "escalations_total", "Cases escalated to a manager with no AI fix", ["reason"]
+)
+LLM_ERRORS = Counter(
+    "llm_errors_total", "Failed LLM calls: timeout, provider_429, local_rate_limit, other", ["kind"]
+)
+LLM_LATENCY = Histogram(
+    "llm_request_duration_seconds",
+    "LLM call latency (includes any wait for the rate limit)",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30),
+)
+ANALYSIS_RUNS = Counter("analysis_runs_total", "Calls to POST /api/analysis/run")
+EXCEPTIONS_DETECTED = Counter(
+    "exceptions_detected_total", "Exceptions found by the rule detectors", ["type"]
+)
 
 
 def install_middleware(app: FastAPI) -> None:

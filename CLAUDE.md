@@ -267,25 +267,27 @@ generate_proposal(exc: DetectedException, timecard: Timecard) -> Proposal
 
 ---
 
-## 9. API (Raman builds stub endpoints from the contracts first and exports `docs/openapi.yaml`)
+## 9. API (as built: `backend/app/api/routes.py`; `docs/openapi.yaml` is exported from the app)
 
-All under `/api/v1`, JSON, snake_case.
+JSON, snake_case. A **case** is a detected exception; the case id is the exception id. Request and response bodies use the contract models from section 8; `CaseListItem` (`exception` + `proposal`) and `CaseDetail` (`timecard`, `exception`, `proposal`, `decision`, `audit_events`) only group them. Regenerate the file with `cd backend && python -m scripts.export_openapi` (a unit test fails if it is stale).
 
 | Method + path | What it does | Notes |
 |---|---|---|
-| `GET /health`, `GET /metrics` | liveness/readiness, Prometheus metrics | no prefix |
-| `POST /seed/load` | load seed timecards/schedules and the policy into the DB | demo/dev only |
-| `GET /timecards?employee_id=&week=` | list timecards | |
-| `POST /analysis/run` | run the detectors over a week and store the exceptions | uses `detect_exceptions` |
-| `GET /exceptions?status=&type=` | list exceptions | |
-| `GET /exceptions/{id}` | one exception with its timecard, proposal and validation | |
-| `POST /exceptions/{id}/propose` | run the AI workflow and store the proposal | uses `generate_proposal` |
-| `GET /proposals/{id}` | one proposal | |
-| `POST /proposals/{id}/decision` | manager Approve/Reject (+ comment) | applies the fix only on APPROVE |
-| `GET /audit?entity_id=` | audit trail | |
-| `GET /policies/search?q=` | debug retrieval | |
+| `GET /health`, `GET /metrics` | liveness/readiness (checks the DB), Prometheus metrics | no `/api` prefix |
+| `POST /api/analysis/run` | timecards in: run `detect_exceptions`, save the timecards and the exceptions as new OPEN cases, write audit events, return the new cases | at most 200 timecards; an id that already exists gives 409 and saves nothing |
+| `GET /api/timecards?employee_id=&week=&limit=` | list saved timecards | `week` is any date in that Monday-to-Sunday week |
+| `GET /api/policies/search?q=&k=` | debug retrieval: the clauses and scores the AI would see | not filtered by the minimum score |
+| `GET /api/cases?status=&type=` | list cases with their latest proposal | |
+| `GET /api/cases/{id}` | one case: timecard, exception, proposal, decision, audit events | |
+| `POST /api/cases/{id}/propose` | run the AI workflow and store the proposal | 409 if resolved or a proposal is already pending |
+| `POST /api/cases/{id}/approve` | manager approves: applies the fix, resolves the case, audits (one transaction) | 409 if escalated, no proposal, or already decided |
+| `POST /api/cases/{id}/reject` | manager rejects (a comment is required): timecard unchanged, case back to OPEN | |
+| `GET /api/audit?entity_id=` | audit trail, newest first | append-only in the database |
+| `POST /api/dev/seed?with_history=` | wipe the data and load the demo set | **off by default**: needs `ENABLE_DEV_SEED=true`, otherwise 404 |
 
 One error shape everywhere: `{ "error": { "code": str, "message": str, "request_id": str } }`.
+
+Real model calls (not the mock) are limited by `LLM_MAX_RPM` (default 5, per process; 0 turns it off). If waiting for a free slot would pass the 25 second proposal deadline, the rule-based fix is used instead.
 
 ---
 
