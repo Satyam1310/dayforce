@@ -13,7 +13,7 @@ from app.ai.prompts import (
 )
 from app.ai.retrieval import InMemoryRetriever, build_query
 from app.ai.settings import AISettings
-from app.ai.workflow import always_pass_validator, generate_proposal, run_workflow
+from app.ai.workflow import generate_proposal, run_workflow
 from app.contracts import (
     DetectedException,
     ExceptionType,
@@ -24,6 +24,7 @@ from app.contracts import (
     ValidationResult,
     Violation,
 )
+from tests.unit.ai.helpers import pass_validator
 
 FIX = Path(__file__).resolve().parents[3] / "app" / "contracts" / "fixtures"
 CFG = PolicyConfig()
@@ -50,7 +51,7 @@ def fail_validator(tc, exc, fix, cfg):
     )
 
 
-def run(exc, tc, llm=None, validator=always_pass_validator, retriever=None, settings=S):
+def run(exc, tc, llm=None, validator=pass_validator, retriever=None, settings=S):
     return run_workflow(
         exc,
         tc,
@@ -149,7 +150,7 @@ def test_validator_fails_twice_then_fallback(exc, tc):
         return (
             fail_validator(tc_, exc_, fix, cfg)
             if len(calls) <= 2
-            else always_pass_validator(tc_, exc_, fix, cfg)
+            else pass_validator(tc_, exc_, fix, cfg)
         )
 
     llm = MockLLM()
@@ -168,7 +169,7 @@ def test_validation_violations_fed_back(exc, tc):
         return (
             fail_validator(tc_, exc_, fix, cfg)
             if len(n) == 1
-            else always_pass_validator(tc_, exc_, fix, cfg)
+            else pass_validator(tc_, exc_, fix, cfg)
         )
 
     p, _ = run(exc, tc, llm, validator=v)
@@ -337,7 +338,7 @@ def test_budget_is_shared_across_failure_causes(exc, tc):
         return (
             fail_validator(tc_, exc_, fix, cfg)
             if len(seen) == 1
-            else always_pass_validator(tc_, exc_, fix, cfg)
+            else pass_validator(tc_, exc_, fix, cfg)
         )
 
     p, ev = run(exc, tc, llm, validator=v)
@@ -366,7 +367,7 @@ def test_deadline_stops_further_calls_and_falls_back(exc, tc):
         tc,
         retriever=InMemoryRetriever(),
         llm=llm,
-        validator=always_pass_validator,
+        validator=pass_validator,
         cfg=CFG,
         settings=S,
         clock=lambda: next(t),
@@ -384,7 +385,7 @@ def test_per_call_timeout_is_capped_by_remaining_time(exc, tc):
         tc,
         retriever=InMemoryRetriever(),
         llm=llm,
-        validator=always_pass_validator,
+        validator=pass_validator,
         cfg=CFG,
         settings=S,
         clock=lambda: next(t),

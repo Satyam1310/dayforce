@@ -34,24 +34,29 @@ from pydantic import BaseModel
 from app.ai.llm import MockLLM
 from app.ai.retrieval import InMemoryRetriever
 from app.ai.settings import AISettings
-from app.ai.workflow import always_pass_validator, run_workflow
+from app.ai.workflow import run_workflow
 from app.contracts import (
     AuditEvent,
     Decision,
     DetectedException,
     ExceptionType,
-    FieldChange,
-    Fix,
-    FixAction,
     PolicyConfig,
     Proposal,
     Punch,
     PunchType,
-    Severity,
     Shift,
     Timecard,
 )
 from app.contracts import models as contract_models
+from app.domain.rules import (
+    RULE_DAILY_MAX,
+    RULE_MEAL_BREAK,
+    RULE_MISSED_OUT,
+    RULE_OVERLAP,
+    RULE_WEEKLY_OT,
+    detect_exceptions,
+)
+from app.validator import validate_proposal
 
 from .smoke_llm import IST, fixture_case
 
@@ -111,120 +116,85 @@ def shift(key: str, n: str, emp: str, start: datetime, end: datetime, loc: str) 
     return Shift(id=uid(key, "shift", n), employee_id=emp, start=start, end=end, location_id=loc)
 
 
-def reassign(shift_obj: Shift) -> Fix:
-    return Fix(
-        action=FixAction.REASSIGN_SHIFT,
-        changes=[
-            FieldChange(
-                target_id=shift_obj.id, field="employee_id", old=shift_obj.employee_id, new=None
-            )
-        ],
+def derive(
+    timecards: list[Timecard], kind: ExceptionType, rule: str
+) -> tuple[Timecard, DetectedException]:
+    """Run the real detectors over these timecards and return the exception they find, with
+    the timecard it belongs to. Nothing about the exception is typed by hand."""
+    exc = next(
+        e for e in detect_exceptions(timecards) if e.type is kind and e.evidence.get("rule") == rule
     )
+    return next(t for t in timecards if t.id == exc.timecard_id), exc
 
 
-def exception_for(
-    key: str,
-    tc: Timecard,
-    kind: ExceptionType,
-    severity: Severity,
-    evidence: dict[str, Any],
-    refs: list[str],
-    baseline: Fix | None,
-) -> DetectedException:
-    return DetectedException(
-        id=uid(key, "exception"),
-        type=kind,
-        severity=severity,
-        employee_id=tc.employee_id,
-        timecard_id=tc.id,
-        work_date=tc.work_date,
-        evidence=evidence,
-        policy_refs=refs,
-        baseline_fix=baseline,
-        status="OPEN",
-    )
-
-
-def missed_punch(key: str, day: int, severity: Severity, notes: str | None):
-    emp, tc_id = uid(key, "employee"), uid(key, "timecard")
+def missed_punch(key: str, day: int, notes: str | None):
+    emp = uid(key, "employee")
     sh = shift(key, "1", emp, ist(day, 9), ist(day, 18), "loc-pune-01")
     tc = Timecard(
-        id=tc_id,
+        id=uid(key, "timecard"),
         employee_id=emp,
         work_date=date(2026, 3, day),
         punches=[punch(key, "in", emp, PunchType.IN, ist(day, 9, 2))],
         shifts=[sh],
         notes=notes,
     )
-    fix = Fix(
-        action=FixAction.ADD_PUNCH,
-        changes=[FieldChange(target_id=tc.id, field="punch.OUT", old=None, new=sh.end.isoformat())],
-    )
-    evidence = {
-        "clock_in": ist(day, 9, 2).isoformat(),
-        "clock_out": None,
-        "scheduled_shift_end": sh.end.isoformat(),
-        "resulting_shift_hours": 8.97,
-    }
-    return tc, exception_for(
-        key, tc, ExceptionType.MISSED_PUNCH, severity, evidence, ["POL-TA-01"], fix
-    )
+    return derive([tc], ExceptionType.MISSED_PUNCH, RULE_MISSED_OUT)
 
 
-def overtime_risk(key: str, day: int, severity: Severity):
+def overtime_week(key: str, thursday: int, friday_hours: int = 8):
+    """Monday to Thursday worked (8 paid hours a day) plus a Friday shift still to come."""
     emp = uid(key, "employee")
-    today = shift(key, "1", emp, ist(day, 9), ist(day, 18, 30), "loc-pune-01")
-    upcoming = shift(key, "2", emp, ist(day + 1, 9), ist(day + 1, 18), "loc-pune-01")
-    tc = Timecard(
-        id=uid(key, "timecard"),
-        employee_id=emp,
-        work_date=date(2026, 3, day),
-        punches=[
-            punch(key, "in", emp, PunchType.IN, ist(day, 9)),
-            punch(key, "out", emp, PunchType.OUT, ist(day, 18, 30)),
-        ],
-        shifts=[today, upcoming],
-        notes=None,
+    week = []
+    for d in range(thursday - 3, thursday + 1):
+        week.append(
+            Timecard(
+                id=uid(key, "timecard", str(d)),
+                employee_id=emp,
+                work_date=date(2026, 3, d),
+                punches=[
+                    punch(key, f"in{d}", emp, PunchType.IN, ist(d, 9)),
+                    punch(key, f"bs{d}", emp, PunchType.BREAK_START, ist(d, 13)),
+                    punch(key, f"be{d}", emp, PunchType.BREAK_END, ist(d, 13, 30)),
+                    punch(key, f"out{d}", emp, PunchType.OUT, ist(d, 17, 30)),
+                ],
+                shifts=[shift(key, str(d), emp, ist(d, 9), ist(d, 17, 30), "loc-pune-01")],
+                notes=None,
+            )
+        )
+    friday = thursday + 1
+    week.append(
+        Timecard(
+            id=uid(key, "timecard", str(friday)),
+            employee_id=emp,
+            work_date=date(2026, 3, friday),
+            punches=[],
+            shifts=[
+                shift(key, "fri", emp, ist(friday, 9), ist(friday, 9 + friday_hours), "loc-pune-01")
+            ],
+            notes=None,
+        )
     )
-    evidence = {"worked_hours": 31.5, "remaining_scheduled_hours": 8.0, "projected_hours": 39.5}
-    return tc, exception_for(
-        key,
-        tc,
-        ExceptionType.OVERTIME_RISK,
-        severity,
-        evidence,
-        ["POL-TA-04", "POL-TA-03"],
-        reassign(upcoming),
-    )
+    return derive(week, ExceptionType.OVERTIME_RISK, RULE_WEEKLY_OT)
 
 
-def schedule_conflict(key: str, day: int, severity: Severity):
+def schedule_conflict(key: str, day: int):
     emp = uid(key, "employee")
-    first = shift(key, "1", emp, ist(day, 9), ist(day, 17), "loc-pune-01")
-    second = shift(key, "2", emp, ist(day, 15), ist(day, 21), "loc-mumbai-02")
     tc = Timecard(
         id=uid(key, "timecard"),
         employee_id=emp,
         work_date=date(2026, 3, day),
         punches=[],
-        shifts=[first, second],
+        shifts=[
+            shift(key, "1", emp, ist(day, 9), ist(day, 17), "loc-pune-01"),
+            shift(key, "2", emp, ist(day, 15), ist(day, 21), "loc-mumbai-02"),
+        ],
         notes=None,
     )
-    evidence = {"shift_a": first.id, "shift_b": second.id, "overlap_hours": 2.0}
-    return tc, exception_for(
-        key,
-        tc,
-        ExceptionType.SCHEDULE_CONFLICT,
-        severity,
-        evidence,
-        ["POL-TA-05"],
-        reassign(second),
-    )
+    return derive([tc], ExceptionType.SCHEDULE_CONFLICT, RULE_OVERLAP)
 
 
-def missing_break(key: str, day: int, severity: Severity, notes: str | None):
+def missing_break(key: str, day: int, notes: str | None):
     emp = uid(key, "employee")
-    sh = shift(key, "1", emp, ist(day, 9), ist(day, 17, 30), "loc-pune-01")
     tc = Timecard(
         id=uid(key, "timecard"),
         employee_id=emp,
@@ -233,23 +203,15 @@ def missing_break(key: str, day: int, severity: Severity, notes: str | None):
             punch(key, "in", emp, PunchType.IN, ist(day, 9)),
             punch(key, "out", emp, PunchType.OUT, ist(day, 17, 30)),
         ],
-        shifts=[sh],
+        shifts=[shift(key, "1", emp, ist(day, 9), ist(day, 17, 30), "loc-pune-01")],
         notes=notes,
     )
-    fix = Fix(
-        action=FixAction.DEDUCT_BREAK,
-        changes=[FieldChange(target_id=tc.id, field="break_minutes", old=None, new="30")],
-    )
-    evidence = {"shift_hours": 8.5, "break_minutes_logged": 0, "rule": "meal break"}
-    return tc, exception_for(
-        key, tc, ExceptionType.POLICY_BREACH, severity, evidence, ["POL-TA-02"], fix
-    )
+    return derive([tc], ExceptionType.POLICY_BREACH, RULE_MEAL_BREAK)
 
 
-def long_day(key: str, day: int, severity: Severity, notes: str | None):
+def long_day(key: str, day: int, notes: str | None):
     """A day over 12 hours. The policy has no automatic fix for this: manager review."""
     emp = uid(key, "employee")
-    sh = shift(key, "1", emp, ist(day, 8), ist(day, 16), "loc-pune-01")
     tc = Timecard(
         id=uid(key, "timecard"),
         employee_id=emp,
@@ -258,13 +220,10 @@ def long_day(key: str, day: int, severity: Severity, notes: str | None):
             punch(key, "in", emp, PunchType.IN, ist(day, 8)),
             punch(key, "out", emp, PunchType.OUT, ist(day, 21, 30)),
         ],
-        shifts=[sh],
+        shifts=[shift(key, "1", emp, ist(day, 8), ist(day, 16), "loc-pune-01")],
         notes=notes,
     )
-    evidence = {"worked_hours": 13.5, "max_daily_hours": 12}
-    return tc, exception_for(
-        key, tc, ExceptionType.POLICY_BREACH, severity, evidence, ["POL-TA-03"], None
-    )
+    return derive([tc], ExceptionType.POLICY_BREACH, RULE_DAILY_MAX)
 
 
 # ---------------------------------------------------------------- the cases
@@ -297,19 +256,19 @@ def make_input(spec: Spec) -> tuple[Timecard, DetectedException]:
         exc, tc = fixture_case()  # the real fixtures
         return tc, exc
     if k == "overtime-risk-fallback":
-        return overtime_risk(k, 12, Severity.MEDIUM)
+        return overtime_week(k, 12)
     if k == "schedule-conflict-llm":
-        return schedule_conflict(k, 13, Severity.HIGH)
+        return schedule_conflict(k, 13)
     if k == "break-approved":
-        return missing_break(k, 9, Severity.LOW, "Busy day, skipped lunch.")
+        return missing_break(k, 9, "Busy day, skipped lunch.")
     if k == "missed-punch-fallback-approved":
-        return missed_punch(k, 10, Severity.MEDIUM, None)
+        return missed_punch(k, 10, None)
     if k == "overtime-risk-rejected":
-        return overtime_risk(k, 5, Severity.HIGH)
+        return overtime_week(k, 5, friday_hours=10)  # 42 projected hours
     if k == "long-day-escalated":
-        return long_day(k, 6, Severity.HIGH, "Stayed late to finish the stock count.")
+        return long_day(k, 6, "Stayed late to finish the stock count.")
     if k == "schedule-conflict-low-confidence":
-        return schedule_conflict(k, 4, Severity.HIGH)
+        return schedule_conflict(k, 4)
     raise KeyError(k)
 
 
@@ -320,7 +279,7 @@ def build_case(index: int, spec: Spec) -> CaseDetail:
         tc,
         retriever=InMemoryRetriever(),
         llm=MockLLM(spec.mock_mode),
-        validator=always_pass_validator,
+        validator=validate_proposal,
         cfg=PolicyConfig(),
         settings=AISettings(),
     )

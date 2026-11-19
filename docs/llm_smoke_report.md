@@ -5,7 +5,7 @@ Generated 2026-11-18 16:23 UTC by `python -m scripts.smoke_llm`.
 - Provider: `openai_compatible`
 - Models: `openai/gpt-oss-20b`, `openai/gpt-oss-120b`
 - Retriever: `memory`
-- Validator: always-pass placeholder. TODO(Ankit): real `validate_proposal`.
+- Validator: always-pass placeholder. This run was made before the real validator was added, so a new run is needed to measure the real validator with a real model.
 - Requests throttled to at most 5 per minute (shared by all models).
 
 ## Side by side
