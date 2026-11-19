@@ -1,8 +1,8 @@
 # Study guide (for Harsh)
 
-Read this once top to bottom, then open the files named in it. It describes the code on `main`.
-Things that exist only in an open pull request are marked **(open PR)**. Function names are given
-instead of line numbers because line numbers move.
+Read this once top to bottom, then open the files named in it. It describes the code on `main`
+(PRs #12 to #17 are merged) plus PR #19, which is open and marked **(PR #19)**. Function names are
+given instead of line numbers because line numbers move.
 
 ## 1. Words you will need
 
@@ -35,7 +35,11 @@ instead of line numbers because line numbers move.
 | `scripts/smoke_llm.py` | Runs a fixed set of cases against one or more models and reports rates and latency. Throttled. |
 | `scripts/demo_flow.py` | A narrated run of one case, for the demo video. |
 | `scripts/export_mock_data.py` | Builds the example data and TypeScript types for the frontend from the real models. |
-| `api/`, `db/`, `main.py`, `services/`, `observability/` **(open PR #12)** | The API, Postgres tables, applying an approved fix, logging and metrics. Not on `main` yet. |
+| `ai/guard.py` **(PR #19)** | The LLM rate limit (`RateLimiter`, `RateLimitedLLM`) and the LLM metrics wrapper (`InstrumentedLLM`). Applied in the API only. |
+| `api/routes.py`, `api/errors.py` | All the HTTP endpoints and the one error shape. **(PR #19)** adds `POST /api/analysis/run`, `GET /api/timecards`, `GET /api/policies/search`. |
+| `db/` (`connection.py`, `repo.py`, `schema.sql`, `seed.py`) | One connection and transaction per request, plain SQL, the append-only audit trigger, the demo seed. |
+| `services/apply_fix.py` | Applies an approved fix to a timecard. |
+| `observability/` | JSON logs with request ids, and the Prometheus counters. **(PR #19)** adds validator rejections, escalations, LLM errors and the LLM latency histogram. |
 
 Outside `backend/app`: `data/policies/time_attendance_policy.md` (the policy text),
 `docs/frontend-mock/` (data for the UI), `frontend/` (React screens).
@@ -78,7 +82,7 @@ Take the fixture timecard: someone clocked in at 09:02 and never clocked out, wi
    `Proposal` with status `PENDING_REVIEW`.
 9. **Result.** `run_workflow` returns `(proposal, events)`: one `AuditEvent` per step
    (`WORKFLOW_STARTED`, `POLICY_RETRIEVED`, `LLM_CALLED`, `VALIDATION_RESULT`, and so on). It stores nothing.
-10. **After that (open PR #12).** The API saves the proposal and events. A manager approves or
+10. **After that.** The API (`POST /api/cases/{id}/propose`) saves the proposal and events. A manager approves or
     rejects. On approval `apply_fix` changes the timecard, and the decision and the change are
     saved together, with audit events. On rejection nothing changes.
 
@@ -144,7 +148,8 @@ obeys, its fix goes through the same validator, which rejects it. In our tests, 
 through (PR #15, merged). We do not claim immunity.
 
 **5. What if the model is down or rate limited?** An error, timeout or 429 falls back at once to
-the rule-based fix. If there is none, a manager gets the case. At most 2 calls and 25 seconds.
+the rule-based fix. If there is none, a manager gets the case. At most 2 calls and 25 seconds. The
+API also keeps real calls under `LLM_MAX_RPM` (default 5 a minute per process) **(PR #19)**.
 
 **6. How do you know the detectors are right?** Unit tests on every boundary (exactly 8, 12, 6
 hours, 38 and 40 weekly hours, 10 hours of rest), property tests on random timecards, and a golden
@@ -172,8 +177,9 @@ We use it only as a coarse net: under 0.5 goes to a manager. The 0.75 on rule-ba
 fixed value we chose, not a measurement.
 
 **12. How does it scale?** The workflow keeps no state, so several copies can run side by side.
-The limit is the model: the free tier allows about 8,000 tokens a minute. None of the scaling is
-deployed yet; see Satyam's Docker and Kubernetes PRs when they exist.
+The limit is the model: the free tier allows about 8,000 tokens a minute, and our rate limit is per
+copy, so it adds up across copies. Kubernetes manifests exist for Postgres and the frontend (PR #17);
+the backend is not in them yet, so scaling out is not deployed or tested.
 
 **13. What are the privacy risks?** A hosted model sees employee ids, punch times and notes. We
 have an offline mode with a local model, but we did no privacy review.
@@ -183,6 +189,89 @@ The team set the architecture, the contracts, the policy and the safety rules, a
 tested. Teammate review of several pull requests is still to be done.
 
 **15. What would you do differently?** Put the evaluation in earlier, because it found the
-retrieval bug. Agree the API paths with the contract spec before building it, because the API now
-differs from the spec. And test the real model together with the real validator, which we have not
+retrieval bug. Agree the API paths with the contract spec before building it, because the API differed
+from the spec (we updated `CLAUDE.md` section 9 to match what was built). And test the real model together with the real validator, which we have not
 done yet.
+
+## 6. The new parts (PR #19)
+
+Read these files, in this order: `api/routes.py` (the analysis section), `ai/guard.py`,
+`observability/metrics.py`, `tests/system/conftest.py`, `tests/system/test_failure_injection.py`.
+
+**Analysis endpoint.** `POST /api/analysis/run` takes a list of `Timecard` (at most 200). It checks
+the ids are unique and each punch and shift belongs to the timecard's employee (422), refuses
+timecard ids that are already saved (409, nothing saved), runs `detect_exceptions` with the real
+`PolicyConfig`, saves the timecards and the exceptions as OPEN cases, writes `TIMECARD_IMPORTED`
+and `EXCEPTION_DETECTED` audit events, and returns the new cases. The whole request is one database
+transaction, so a failure saves nothing. No AI is involved; the notes are stored and never read.
+
+**Rate guard.** `guard_llm` wraps the model for each propose call. `InstrumentedLLM` (always) times
+the call and counts failures by kind (`timeout`, `provider_429`, `local_rate_limit`, `other`).
+`RateLimitedLLM` (real providers only) asks the shared `RateLimiter.try_reserve` how long to wait for
+a free slot. The workflow passes its remaining deadline as the call's timeout; if the wait would be
+longer, the guard raises `LLMRateLimited`, which is an `LLMError`, so the existing fallback runs and
+the rule-based fix is used. The limiter lives in the process, so with several replicas the limit is
+per replica. `LLM_MAX_RPM=0` turns it off.
+
+**Metrics.** After a proposal the route reads the audit events the workflow returned: a
+`VALIDATION_RESULT` with `passed: false` counts a validator rejection, an `ESCALATED` event counts an
+escalation by reason. Proposals by source were already counted. `/metrics` is how you see that the
+safety nets are firing.
+
+**System test.** `start_api` runs uvicorn as a separate process with `LLM_PROVIDER=mock` and a chosen
+`LLM_MOCK_MODE`, and the tests talk to it with HTTP. The database is `DATABASE_URL` or a container the
+test starts. It fails, rather than skips, when there is no database, so a green run is real.
+
+## 7. Self-quiz on the new parts
+
+Answer without looking, then check the answers at the bottom.
+
+1. What does `POST /api/analysis/run` return when one of the timecard ids is already saved, and what
+   is saved?
+2. Why is the analysis endpoint transaction all-or-nothing, and which part of the code gives you that?
+3. A real model call would have to wait 40 seconds for a free slot, and 12 seconds of the deadline are
+   left. What happens, and why does the manager still get a proposal?
+4. With 3 replicas and `LLM_MAX_RPM=5`, how many real calls a minute can the provider receive, and
+   why?
+5. Why is the rate guard applied in the API and not inside `build_llm`?
+6. Which two audit events does a proposal count as a validator rejection and as an escalation, and
+   where does the route get them from?
+7. `ENABLE_DEV_SEED` is unset. What does `POST /api/dev/seed` return, and what happens to the data?
+8. In the system test, the mock LLM is set to `bad_citation`. What does the proposal look like, and
+   what is in the audit trail?
+9. Why does the system test fail instead of skipping when no database is available?
+10. The load test is pointed at an API that is secretly using a real model. How does the script
+    protect you, and what is it still not able to tell you?
+
+### Answers
+
+1. HTTP 409 with code `TIMECARD_EXISTS`. Nothing is saved, not even the new timecards in the same
+   request: the ids are checked before any insert, and the request is one transaction.
+2. The `get_conn` dependency opens one connection and commits only if the handler returns; an
+   exception (including the 409/422 `ApiError`) rolls everything back. The audit events are inserted
+   in the same transaction as the timecards and cases.
+3. `try_reserve(12)` returns `None` because 40 > 12, so `RateLimitedLLM` raises `LLMRateLimited`
+   without calling the model. The workflow treats it like any LLM error: `LLM_ERROR` audit event,
+   then the rule-based fix, validated again, source `RULES_FALLBACK`. If there is no rule-based fix
+   the case is escalated.
+4. Up to 15 a minute. The limiter is an in-memory object per process, so each replica allows 5.
+   Set `LLM_MAX_RPM` to the provider limit divided by the number of replicas, or use a shared limiter.
+5. `build_llm` is also used by the smoke and evaluation scripts, which have their own `--max-rpm`
+   throttle. Wrapping it would double-limit them (at 5 a minute instead of 18 for the smoke script)
+   and change code that was not part of the API.
+6. `VALIDATION_RESULT` with `passed` false, and `ESCALATED` (with a `reason` such as
+   `LOW_CONFIDENCE`). They come from the list of audit events that `run_workflow` returns, which the
+   propose route loops over after saving them.
+7. 404 `NOT_FOUND` in the normal error shape. Nothing is deleted: the flag check runs before the
+   database dependency, so the database is not even opened.
+8. The first answer cites `POL-TA-99`, which was not retrieved, so a `CITATION_REJECTED` event is
+   written; the mock does the same on the retry; the budget runs out (`RETRY_BUDGET_EXHAUSTED`,
+   `FALLBACK_USED`) and the proposal is `RULES_FALLBACK`, `PENDING_REVIEW`, validated, citing only
+   `POL-TA-01`. The timecard is unchanged until a manager approves.
+9. A test that quietly skips proves nothing and would turn a broken environment into a green run. It
+   uses `DATABASE_URL` if set, starts its own container if not, and calls `pytest.fail` with a clear
+   message if neither works.
+10. It refuses non-local addresses (unless `--allow-remote`) and anything with "groq" in the host, and
+    it stops at once if an LLM-sourced proposal does not have the mock's exact rationale text. It
+    cannot tell you anything about real-model speed or quality, and a real model that returned that
+    exact sentence would not be caught; the per-process rate limit also keeps a mistake small.

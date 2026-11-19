@@ -1,12 +1,14 @@
 # Timecard Exception Resolution Agent: Overview
 
-Owner: Harsh (lead, AI/RAG). Written from the code on `main`. Anything that exists only in an
-open pull request is marked **(open PR)** and is not described as done. Every number was measured
+Owner: Harsh (lead, AI/RAG). Written from the code on `main` (PRs #12 to #17 are merged) plus
+PR #19, which is open and marked **(PR #19)**. Every number was measured
 by running something; where a number would be a guess, this document says it needs measuring.
 
 Related documents: [ARCHITECTURE.md](ARCHITECTURE.md) (diagram and module map),
 [SECURITY.md](SECURITY.md) (threat model), [TESTING.md](TESTING.md) (tests and numbers),
-[STUDY_GUIDE.md](STUDY_GUIDE.md) (for learning the code), [llm_smoke_report.md](llm_smoke_report.md).
+[STUDY_GUIDE.md](STUDY_GUIDE.md) (for learning the code), [RUNBOOK.md](RUNBOOK.md) (run it, switch the model),
+[DEMO_SCRIPT.md](DEMO_SCRIPT.md), [SLIDES.md](SLIDES.md), [ci-additions.md](ci-additions.md),
+[llm_smoke_report.md](llm_smoke_report.md).
 
 ## 1. What the system does, in plain words
 
@@ -32,12 +34,15 @@ clauses `POL-TA-01` to `POL-TA-07`).
 | pgvector retriever and policy ingest | Done, tested against a real `pgvector/pgvector:pg16` container |
 | Smoke script, demo script, mock data for the UI | Done (`backend/scripts/`, `docs/frontend-mock/`) |
 | Real-model smoke run (Groq) | Done once, before the real validator existed (section 5) |
-| Frontend screens on built-in mock data | Done (`frontend/`, 25 tests) |
-| API, Postgres tables, approve and reject, audit storage | **Open PR #12** (screens against it: #13, #14) |
+| Frontend screens, on built-in mock data or the real API | Done (`frontend/`, 35 tests; PRs #12 to #14) |
+| API, Postgres tables, approve and reject, append-only audit | Done and merged (PR #12) |
+| Analysis endpoint (timecards in, cases out), timecards list, policy search | **PR #19** (open) |
+| LLM rate guard (`LLM_MAX_RPM`) and safety metrics | **PR #19** (open) |
+| System test with LLM failure injection, load test | **PR #19** (open); run locally, not in CI yet |
 | Golden set (40 cases), evaluation report, property tests | Done and merged (PR #15) |
 | Seed dataset of 60+ timecards with ground truth | Not started |
-| Docker, Kubernetes, CI/CD | See Satyam's Docker and Kubernetes PRs (none is open yet) |
-| Demo video, slides | Not started |
+| Docker Compose, Kubernetes manifests (Postgres, frontend), CI for backend and frontend | Merged (PR #17). The backend is not in the Kubernetes manifests; nothing is publicly deployed |
+| Demo script, slides outline, runbook | Written (`DEMO_SCRIPT.md`, `SLIDES.md`, `RUNBOOK.md`); the video is not recorded |
 
 ## 2. Architecture
 
@@ -50,8 +55,9 @@ timecards -> detect_exceptions -> retrieve policy -> model proposes -> parse -> 
           -> validate_proposal -> (fallback | escalate) -> Proposal (PENDING_REVIEW) -> manager
 ```
 
-`run_workflow` returns the proposal and a list of audit events and stores nothing. The API that
-stores them and applies an approved fix is in open PR #12.
+`run_workflow` returns the proposal and a list of audit events and stores nothing. The API stores
+them and applies an approved fix on approval (PR #12). Timecards get into the system through
+`POST /api/analysis/run` (PR #19), which runs the detectors and saves the cases.
 
 ## 3. The safety harness
 
@@ -60,8 +66,9 @@ the problem; the model must answer in a fixed JSON shape; every citation must be
 actually retrieved; the validator re-checks the fix on a copy of the timecard; a shared budget of 2
 model calls and 25 seconds, then fall back to the rule-based fix or escalate; low confidence
 escalates; only a manager's approval changes a timecard; every step has an audit event. The full
-threat model, including what is **not** covered (no login, a fixed demo manager, an unguarded demo
-reset endpoint in the open PR), is in [SECURITY.md](SECURITY.md).
+threat model, including what is **not** covered (no login, a fixed demo manager, no limit on the
+size of one timecard), is in [SECURITY.md](SECURITY.md). The demo reset endpoint is off by default
+(`ENABLE_DEV_SEED`, 404 when off).
 
 ## 4. The AI workflow and its failure paths
 
@@ -81,7 +88,7 @@ fall back = the baseline fix, validated, source RULES_FALLBACK (confidence 0.75)
 | What goes wrong | What the system does | Tested |
 |---|---|---|
 | **The model is down or times out** | Falls back at once (no retry) to the rule-based fix, validated. No fix, or it fails validation: escalate. | Mock `timeout` mode |
-| **Rate limit (HTTP 429)** | Treated as any model failure: immediate fallback, no retry into a rate limit. The smoke and evaluation scripts also throttle to stay under the limit. The API does not throttle yet. | Stubbed 429 through the real client code |
+| **Rate limit (HTTP 429)** | Treated as any model failure: immediate fallback, no retry into a rate limit. The smoke and evaluation scripts also throttle to stay under the limit, and the API keeps real calls under `LLM_MAX_RPM` **(PR #19)**: a call that would wait past the deadline falls back. | Stubbed 429 through the real client code; mock `rate_limited` mode against the running API (system test, PR #19) |
 | **Invalid JSON or schema** | One more try inside the shared budget, then fall back. | Mock `invalid_json` |
 | **Made-up citation** | Rejected (a clause that was not retrieved). Counts against the budget, then fall back. | Mock `bad_citation` |
 | **Prompt injection in the notes** | Notes are cleaned, escaped and wrapped, and the detectors never read them. If the model obeys anyway, its fix goes through the same validator. | Hostile notes in unit tests; 5 golden cases (PR #15, merged) |
@@ -145,30 +152,35 @@ a simulated model that obeys hostile notes got 0 of 5 attacks through. One-chara
 8 hour, 6 hour and 12 hour rules each failed the golden set, so the evaluation does catch
 regressions. See [TESTING.md](TESTING.md) for how to run it and the full list.
 
-**Tests on `main`:** 342 backend tests pass with a pgvector container (335 without; 7 need a
-database), 99% coverage, 100% on the detectors and the validator; 25 frontend tests.
+**Tests (with PR #19):** 430 backend tests pass with a pgvector container (375 pass and 36 skip without one), 98% coverage, 100% on the detectors and the validator; 19 of them are system tests against the running API; 35 frontend tests. See [TESTING.md](TESTING.md).
 
 ## 6. How it scales up, and how to scale it down
 
-Deployment (Docker images, Kubernetes, the autoscaler): see Satyam's Docker and Kubernetes PRs
-(none is open yet). What is true in the code today:
+Deployment: Docker Compose runs Postgres, the frontend and (behind a profile) the backend;
+Kubernetes manifests exist for Postgres and the frontend (PR #17); the backend and the autoscaler
+are not in them yet. What is true in the code today:
 
 - `run_workflow` keeps no state between calls, so several copies can run side by side. In the API
-  (open PR #12) each request uses one database transaction and nothing is kept in memory, and the
-  schema is created under a lock so several copies can start together.
-- **Model limit:** the free tier allows about 8,000 tokens a minute, and the throttle in the
-  scripts is 5 to 18 requests a minute. With several API copies, a per-copy limit would add up.
-  The API has no throttle yet. A paid or self-hosted model removes this limit.
+  each request uses one database transaction and nothing is kept in memory, and the schema is
+  created under a lock so several copies can start together.
+- **Model limit:** the free tier allows about 8,000 tokens a minute. **(PR #19)** The API keeps real
+  calls under `LLM_MAX_RPM` (default 5 a minute) with an in-process limiter, so with N copies the
+  provider can see N times that: set `LLM_MAX_RPM` to the provider limit divided by the copies, or
+  move to a shared limiter (for example Redis, not built). A paid or self-hosted model removes the
+  limit.
 - **Retrieval:** the query depends only on the rule that fired, so there are eight distinct queries
   and their results can be cached. Not built.
-- **Database:** the retriever opens a new connection per query, and the API (open PR #12) opens one
+- **Database:** the retriever opens a new connection per query, and the API opens one
   per request. A connection pool is needed before many copies share one Postgres.
 - **A queue:** a proposal waits for the model for up to 25 seconds. At volume, proposals should be
   made by background workers. Not built and not in v1.
 - **Scaling down:** one copy, `LLM_PROVIDER=mock` or a hosted model, and `RETRIEVER=memory` (no
   database for retrieval and no embedding model download). pgvector needs a 64 MB model download
   (measured), cached in a temporary folder by default.
-- Memory per copy, requests per second and cost per proposal **need measuring**.
+- **Measured (PR #19, local):** one uvicorn worker with the mock model and a local Postgres handled
+  252 requests per second over 1,200 requests with 0 errors; median 38 ms, 95th percentile 58 ms
+  (`scripts/load_test.py`). Memory per copy, several copies, a real model and cost per proposal
+  **need measuring**.
 
 ## 7. Trade-offs and why
 
@@ -185,20 +197,20 @@ Deployment (Docker images, Kubernetes, the autoscaler): see Satyam's Docker and 
 
 ## 8. What is not done yet
 
-- **API and screens against it:** open PRs #12 to #14. Known issues there: the API paths differ
-  from the spec in `CLAUDE.md`; the validator import in `routes.py` breaks once the validator is on
-  `main`; the demo reset endpoint has no guard.
-- **Evaluation:** merged (PR #15), but the real-model evaluation (`--real`) has not been run.
-- **System test** of the whole flow against a running API, and a **load test**: not built.
-- **Docker, Kubernetes, CI/CD:** see Satyam's PRs; none is open. No CI runs today, so all results
-  above are from local runs.
+- **Real-model evaluation: not run yet.** Command:
+  `python -m scripts.evaluate --real --model openai/gpt-oss-20b --max-rpm 5`. The script's plan:
+  38 proposals, 38 to 76 requests, roughly 8 to 15 minutes at 5 a minute. And the real model with the
+  real validator has not been run at all.
+- **CI does not run the database or system tests** and has no scanner: see
+  [ci-additions.md](ci-additions.md). Results above are from local runs.
+- **Kubernetes:** the backend is not in the manifests, and nothing is publicly deployed.
 - **A seed dataset** of 60+ timecards with ground truth.
-- **LangGraph version** of the workflow, **API throttle** for model calls, **retrieval caching**,
-  a **connection pool**.
+- **LangGraph version** of the workflow, a **shared rate limit** across replicas, **retrieval
+  caching**, a **connection pool**.
 - **Login and roles:** the manager is a fixed demo user. **Privacy review** for sending employee
-  data to a hosted model.
-- **Real model with the real validator**, and a model other than the two tested.
-- **Teammate review** of several pull requests, and the **demo video and slides**.
+  data to a hosted model. No limit on the size of one timecard.
+- **Teammate review** of several pull requests, and the **demo video** (the script and slides
+  outline are written).
 
 ## 9. How we built it
 
@@ -229,8 +241,8 @@ the notes still produces a fix the validator rejects. We tested a simulated obed
 got through) and one real injection try on each of two models. That is evidence, not proof.
 
 **5. Can the AI change someone's pay?** No. It returns a proposal and writes nothing. Only a
-manager's approval through the API (open PR #12) applies a fix, and an escalated case cannot be
-approved.
+manager's approval through the API applies a fix, and an escalated case cannot be
+approved (checked by the system test, PR #19).
 
 **6. How did you choose the retrieval threshold, and how sure are you?** We measured it: on-topic
 queries scored 0.629 to 0.878 and off-topic 0.406 to 0.511, so 0.57 is the middle of the gap. A
@@ -262,9 +274,9 @@ expected results we wrote from the policy (PR #15, merged). It is our reading of
 wrote, so it shows consistency, not that we read the policy correctly.
 
 **12. How does it scale?** The workflow keeps no state, so copies can run side by side. The real
-limit is the model: the free tier is about 8,000 tokens a minute. Nothing is deployed or load
-tested; see Satyam's Docker and Kubernetes PRs. Cost and speed per proposal at volume need
-measuring.
+limit is the model: the free tier is about 8,000 tokens a minute, and our rate limit is per copy.
+A single worker with the mock model did 252 requests a second locally (1,200 requests, 0 errors);
+nothing is deployed on Kubernetes yet, and real-model cost and speed at volume need measuring.
 
 **13. What does the model's confidence number mean?** It is the model's own, uncalibrated estimate.
 We only use it as a coarse net: under 0.5 goes to a manager. The 0.75 on rule-based fixes is a
@@ -283,13 +295,13 @@ was small.
 architecture, contracts, policy and safety rules, and the code is tested. Teammate review of several
 pull requests is still to do.
 
-**17. What is not done?** Section 8: the API and screens are in open PRs, there is no Docker,
-Kubernetes or CI yet, no system or load test, no seed dataset, no login, no privacy review, the
-real-model evaluation has not been run, and the real model has not been run with the real
-validator.
+**17. What is not done?** Section 8: the real-model evaluation has not been run, and the real model
+has not been run with the real validator; CI does not run the database or system tests; the backend
+is not in the Kubernetes manifests and nothing is publicly deployed; no seed dataset, no login, no
+privacy review.
 
 **18. What would you do differently?** Build the evaluation earlier, because it found the retrieval
-bug. Agree the API paths with the spec before building the API. Calibrate the retrieval threshold
+bug. Agree the API paths with the spec before building the API (we later updated `CLAUDE.md` to match). Calibrate the retrieval threshold
 with real exception queries, not short test phrases. And run the real model with the real
 validator as soon as the validator existed.
 
@@ -298,6 +310,7 @@ reject unsafe fixes but not reject a correct rule-based fix. For example, finish
 missing a clock-out may reveal a missing break; we do not blame that on the fix, but we do blame it
 for pushing the day over 12 hours.
 
-**20. What is the biggest risk now?** Integration. The pieces work separately and are tested, but
-the API, the real validator and the screens have not run together on `main`, and the open API PR
-needs a fix before it can merge safely. After that, the unmeasured real-model behaviour.
+**20. What is the biggest risk now?** The real model. Everything around it is tested end to end with a
+mock (the system test), but the real model with the real validator has not been run, and the
+real-model evaluation is still to do. After that, deployment: the backend is not yet in the
+Kubernetes manifests.

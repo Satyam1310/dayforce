@@ -39,9 +39,10 @@ How one case moves through the AI step (`backend/app/ai/workflow.py`):
 - Every policy citation must be a clause that was actually retrieved. Made-up citations are rejected, and the quoted text comes from our policy, never from the model.
 - The validator applies the fix to a copy of the timecard and re-runs the rules. A fix that breaks them is rejected with a reason.
 - A shared budget allows at most 2 LLM calls and 25 seconds per case, then the rule-based fix is used.
+- Real model calls in the API are limited to `LLM_MAX_RPM` a minute (default 5, per API process). If waiting for a free slot would pass the 25 second deadline, the rule-based fix is used instead.
 - Employee notes are untrusted text: cleaned, escaped, length-capped and wrapped in delimiters. The detectors never read them.
 
-More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SECURITY.md](docs/SECURITY.md), [docs/TESTING.md](docs/TESTING.md), [docs/OVERVIEW.md](docs/OVERVIEW.md). To learn the code: [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md).
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SECURITY.md](docs/SECURITY.md), [docs/TESTING.md](docs/TESTING.md), [docs/OVERVIEW.md](docs/OVERVIEW.md). To run it: [docs/RUNBOOK.md](docs/RUNBOOK.md). To learn the code: [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md). For the demo: [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) and [docs/SLIDES.md](docs/SLIDES.md).
 
 ## Tech stack
 Python 3.11 + FastAPI + Pydantic v2 · PostgreSQL 16 + pgvector (plain SQL with psycopg 3, no ORM) · fastembed (`BAAI/bge-small-en-v1.5`, 384 dimensions) · React 18 + TypeScript (Vite) · open-weight LLM via an OpenAI-compatible API · Docker · Kubernetes (Kustomize, HPA) · GitHub Actions CI/CD
@@ -55,24 +56,25 @@ Python 3.11 + FastAPI + Pydantic v2 · PostgreSQL 16 + pgvector (plain SQL with 
 | Validator that re-checks every proposed fix | Done, 100% test coverage (`backend/app/validator/`) |
 | AI module: retrieval, LLM client, prompts, workflow, fallback, escalation | Done and tested (`backend/app/ai/`) |
 | Policy retrieval on a real pgvector database | Done, tested against a real container |
-| Evaluation: 40-case golden set, evaluation script, property tests | Done (`backend/tests/golden/`, `backend/scripts/evaluate.py`) |
-| Real-model smoke run on Groq | Done once (see below) |
-| Frontend screens on mock data | Done (`frontend/`) |
-| Mock data and draft types for the UI | Done (`docs/frontend-mock/`) |
-| Backend API, Postgres tables, approve/reject, audit storage | In review (open PR #12) |
-| Frontend screens against the real API | In review (open PRs #13, #14) |
-| Architecture, security, testing and study documents | In review (open PR #16) |
-| Detectors connected to the API (analysis endpoint), LLM rate limit in the API | Not started |
-| Full-flow system test, real-model evaluation with the real validator | Not started |
-| Docker, Kubernetes, CI/CD, public deployment | Not started |
-| Demo video, slides | Not started |
+| Backend API, Postgres tables, approve/reject, append-only audit | Done and merged (PR #12) |
+| Frontend screens against the real API, Prettier, `docs/openapi.yaml` | Done and merged (PRs #12, #13, #14) |
+| Evaluation: 40-case golden set, evaluation script, property tests | Done and merged (PR #15) |
+| Architecture, security, testing and study documents | Done and merged (PR #16) |
+| Docker Compose (Postgres, frontend, optional backend profile), Kubernetes manifests for Postgres and frontend, CI for backend and frontend | Merged (PR #17). The backend is not in the Kubernetes manifests yet |
+| Analysis endpoint (timecards in, cases out), timecards list, policy search | PR #19, open |
+| LLM rate limit in the API (`LLM_MAX_RPM`), safety metrics | PR #19, open |
+| System test of the whole flow with failure injection, load test | PR #19, open (tests ran locally, not yet in CI) |
+| Real-model smoke run on Groq | Done once, before the real validator existed (see below) |
+| Real-model evaluation with the real validator | **Not run yet** (command in Results) |
+| Public deployment on Kubernetes | Not done |
+| Demo script and slides outline | Written (`docs/DEMO_SCRIPT.md`, `docs/SLIDES.md`); the video is not recorded |
 
 ## LLM
 - **Provider:** Groq's free tier, through an OpenAI-compatible API (`LLM_PROVIDER=openai_compatible`, `LLM_BASE_URL=https://api.groq.com/openai/v1`).
 - **Model:** `openai/gpt-oss-20b` by default. `openai/gpt-oss-120b` also works: change `LLM_MODEL`, nothing else. The model name is a setting, never hard-coded.
 - **Licence:** Apache 2.0, as stated on the Hugging Face model card. The card lists no separate acceptable-use terms. Groq's own free-tier terms are separate and were not reviewed.
 - **Key:** put `LLM_API_KEY` only in `backend/.env`, which is gitignored. `.env.example` leaves it blank. Never commit it. In Kubernetes it will go in a Secret.
-- **Rate limit:** the free tier allows 8,000 tokens per minute and 1,000 requests per day. An HTTP 429 is treated like any other LLM failure: the system falls back to the rule-based fix and a manager still reviews the case.
+- **Rate limit:** the free tier allows 8,000 tokens per minute and 1,000 requests per day. The API keeps real model calls under `LLM_MAX_RPM` (default 5 a minute per process; with several replicas the limit is per replica). An HTTP 429 is treated like any other LLM failure: the system falls back to the rule-based fix and a manager still reviews the case.
 - **Other providers:** `LLM_PROVIDER=ollama` runs a local model offline, and `LLM_PROVIDER=mock` is a fake LLM for tests and demos with no key.
 
 ## Results
@@ -91,7 +93,13 @@ All numbers below were measured by running the commands in [docs/TESTING.md](doc
 
 **Retrieval threshold.** Measured on 8 on-topic and 8 off-topic queries with the real model and database: on-topic 0.629–0.878, off-topic 0.406–0.511, so the pgvector cut-off is 0.57.
 
-**Tests.** 342 backend tests pass with a real pgvector container (99% coverage, 100% on the detectors and the validator). 25 frontend tests pass on Node 20.
+**Tests.** 430 backend tests pass against a real pgvector container (0 skipped, about 16 s), with 98% coverage of `app/` and `scripts/` and 100% on the detectors and the validator. Without a database, 375 pass and 36 skip (the database tests). 35 frontend tests pass on Node 20. Measured by running the commands in [docs/TESTING.md](docs/TESTING.md); a fresh clone passes `scripts/clean_clone_check.sh`.
+
+**System test** (`backend/tests/system/`, 19 tests, about 9 s): the real API in a separate process, over HTTP, against `pgvector/pgvector:pg16`. Timecards in, propose, validate, approve, reject, an escalated case that cannot be approved, approving twice (applied once), append-only audit (the database refuses edits and deletes), the demo reset endpoint answers 404 when off. With the mock model it injects a timeout, an HTTP 429, invalid JSON, an invented citation and low confidence: every one ends safely (rule-based fix or escalation, nothing applied without a manager).
+
+**Load test** (`scripts/load_test.py`, mock model, one uvicorn worker, in-memory retrieval, local Postgres): 200 flows (analysis, propose, approve or reject, reads) with 10 at a time, 1,200 requests, 0 errors, 252 requests per second, median 38 ms, 95th percentile 58 ms, 99th 66 ms. This says nothing about real-model speed.
+
+**Real-model evaluation: not run yet.** Command: `python -m scripts.evaluate --real --model openai/gpt-oss-20b --max-rpm 5`. Estimate from the script's own plan: 38 proposals, 38 to 76 requests, about 8 to 15 minutes at 5 requests a minute. It calls the hosted model, so it needs a key in `backend/.env` and was not run.
 
 **Real-model smoke run** (Groq, 9 proposals per model, 5 requests per minute, [docs/llm_smoke_report.md](docs/llm_smoke_report.md)):
 
@@ -118,38 +126,52 @@ This was a small run (one injection try per model) and it happened before the re
 Feature branches → pull request into `main` (CI must pass, one teammate review) → release merge into `production` (deploys to Kubernetes). Shared contracts in `backend/app/contracts/` change only through a `contract-change` issue. Full project context is in [CLAUDE.md](CLAUDE.md).
 
 ## Run it
-Docker and Kubernetes setup is still being built. What works today:
+Full steps, switching models and the five most likely problems: [docs/RUNBOOK.md](docs/RUNBOOK.md). In short (Python 3.11, Node 20, Docker for Postgres):
 
-**Backend** (Python 3.11, from `backend/`, with a virtual environment active, after installing `requirements.txt` and `requirements-dev.txt`):
 ```bash
-python -m pytest                       # tests (6 need a pgvector database and are skipped without one)
-python -m ruff check .                 # lint
-python -m scripts.evaluate             # golden-set evaluation with the mock LLM, writes docs/evaluation_report.md
-python -m scripts.demo_flow --help     # walk one case through the whole AI flow
-python -m scripts.smoke_llm --mock     # smoke test with the fake LLM, no key needed
+docker compose -f infra/docker/docker-compose.yml up -d postgres     # Postgres + pgvector on :54329
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements-dev.txt
+cd backend
+export DATABASE_URL=postgresql://app:app@localhost:54329/timecards
+export LLM_PROVIDER=mock                    # no key needed; see "LLM" above for a real model
+uvicorn app.main:app --port 8000            # API on :8000, docs on /docs
 ```
-For a real model, copy `.env.example` to `backend/.env` and add your own `LLM_API_KEY`. Real-model runs are throttled: `python -m scripts.smoke_llm --model openai/gpt-oss-20b --max-rpm 5`.
 
-**Frontend** (Node 20, from `frontend/`):
+Demo data (API running): `scripts/demo_seed.sh --reset` sends four known timecards through `POST /api/analysis/run` and gives one open case of each exception type.
+
+**`ENABLE_DEV_SEED`** is **off by default**. It only switches on `POST /api/dev/seed`, which **wipes all data** and loads a fixed demo set; with it off (or unset) that endpoint answers 404 and deletes nothing. Set `ENABLE_DEV_SEED=true` only on your own machine, never in a deployment.
+
+**Frontend** (from `frontend/`):
 ```bash
 npm ci
-npm run dev       # runs on built-in mock data, no backend needed
+npm run dev       # built-in mock data by default; for the real API put VITE_USE_MOCK=false in frontend/.env.local
 npm test
 npm run build
 ```
 There is no login in the prototype: the UI acts as a demo manager.
 
+**Checks:**
+```bash
+cd backend
+python -m ruff check .
+python -m pytest                       # all tests; the system tests need Docker or DATABASE_URL
+python -m pytest --ignore=tests/system # without Docker: database tests skip, system tests left out
+python -m scripts.evaluate             # golden-set evaluation with the mock LLM, writes docs/evaluation_report.md
+python -m scripts.smoke_llm --mock     # smoke test with the fake LLM, no key needed
+```
+`scripts/clean_clone_check.sh` clones the repo fresh and runs the steps above that need no Docker, plus the frontend checks. For a real model, copy `.env.example` to `backend/.env` and add your own `LLM_API_KEY`.
+
 ## Limitations and next steps
-- The API and the screens against it are still in review, so the full flow does not yet run end to end on `main`.
-- Cases in the API come from sample data. Connecting the detectors to the API (so real timecards go in and cases come out) is next.
 - The 100% results are on cases we wrote. They show the rules do what we meant, not that we read the policy correctly. There is no seed dataset of real timecards.
-- The real model has not yet been run together with the real validator.
-- The smoke run is small, and one clean injection result does not prove a model is immune.
+- The real model has not been run together with the real validator, and the real-model evaluation has not been run (command above).
+- The real-model smoke run is small, and one clean injection result does not prove a model is immune.
 - The data model has `employee_id` but no employee name.
 - The company and its policy ("Northwind Retail") are mock data written for this challenge.
-- The free LLM tier limits throughput. A real deployment would use a paid or self-hosted model. The API does not throttle model calls yet.
-- No login or roles: the manager is a fixed demo user. No privacy review for sending employee data to a hosted model.
-- Nothing is deployed and CI does not run yet.
+- The free LLM tier limits throughput. The API keeps calls under `LLM_MAX_RPM`, but that limit is per replica; a real deployment would use a paid or self-hosted model or a shared limiter.
+- No login or roles: the manager is a fixed demo user, and the API has no authentication. No privacy review for sending employee data to a hosted model.
+- The system and load tests ran locally; CI does not run them yet (see [docs/ci-additions.md](docs/ci-additions.md)).
+- Kubernetes manifests exist for Postgres and the frontend; the backend is not in them yet and nothing is publicly deployed.
 
 ## How we built it
 An AI coding assistant was used for scaffolding and first drafts of code and docs. The team set the architecture, the contracts, the policy and the safety rules, and wrote tests for every failure path. Code is read, tested and reviewed by a teammate before it is merged.

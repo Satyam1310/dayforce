@@ -1,8 +1,8 @@
 # Architecture
 
 How a timecard problem is found, fixed on paper, checked, and shown to a manager, and where
-each safety check sits. Written from the code on `main`. Anything that exists only in an open
-pull request is marked **(open PR)** and is not described as done.
+each safety check sits. Written from the code on `main` plus PR #19 (the analysis endpoint, the
+LLM rate guard, the metrics and the system tests), which is open and marked **(PR #19)** below.
 
 ## The idea in one paragraph
 
@@ -16,13 +16,14 @@ step is written down. The model is one untrusted step inside a frame of ordinary
 
 ```mermaid
 flowchart TD
-    T[Timecards: punches, shifts, notes] --> D["detect_exceptions<br/>plain code, no AI"]
+    T[Timecards: punches, shifts, notes] --> AR["POST /api/analysis/run (PR #19)<br/>saves timecards and cases"]
+    AR --> D["detect_exceptions<br/>plain code, no AI"]
     D --> E[DetectedException<br/>with a rule-based baseline fix]
     E --> R["Retrieve policy clauses<br/>build_query then Retriever.retrieve"]
     R -->|no clause above the minimum score| ESC1[ESCALATED<br/>no AI fix]
     R --> L["LLM proposes a fix as JSON<br/>max 2 calls, 25 s in total"]
     N[/"timecard notes<br/>UNTRUSTED text"/] -.->|"cleaned, escaped, wrapped<br/>sanitize_notes"| L
-    L -->|error, timeout or 429| FB
+    L -->|error, timeout, 429<br/>or our own rate limit| FB
     L --> P["parse_llm_output<br/>Pydantic schema"]
     P -->|invalid| RETRY{budget left?}
     P --> C{"every citation was<br/>retrieved?"}
@@ -36,16 +37,17 @@ flowchart TD
     FB -->|passes| PR
     CONF -->|no| ESC3[ESCALATED]
     CONF -->|yes| PR["Proposal: PENDING_REVIEW<br/>plus audit events"]
-    PR --> M["Manager: Approve or Reject (open PR)"]
-    M -->|Approve| A["Apply the fix to the timecard<br/>in one transaction (open PR)"]
-    M --> LOG[(Append-only audit log, open PR)]
+    PR --> M["Manager: Approve or Reject"]
+    M -->|Approve| A["Apply the fix to the timecard<br/>in one transaction"]
+    M --> LOG[(Append-only audit log)]
     ESC1 --> LOG
     ESC2 --> LOG
     ESC3 --> LOG
     A --> LOG
 ```
 
-`run_workflow` returns the proposal and the list of audit events. It stores nothing itself.
+`run_workflow` returns the proposal and the list of audit events. It stores nothing itself; the API
+(`POST /api/cases/{id}/propose`) saves the proposal and the events, in one transaction.
 
 ## What each part does
 
@@ -59,11 +61,13 @@ flowchart TD
 | Model client | `backend/app/ai/llm.py` | `OpenAICompatibleLLM` (any OpenAI-style endpoint, such as Groq) and `MockLLM` (a fake with failure modes, for tests). Model name, URL and key come from environment variables. |
 | Workflow | `backend/app/ai/workflow.py` | `run_workflow` and `generate_proposal`: the state machine in the diagram. |
 | Validator | `backend/app/validator/validator.py` | `validate_proposal`: re-checks every proposed fix with the real rules. |
-| Settings | `backend/app/ai/settings.py` | Thresholds, retry budget (2 calls), deadline (25 s), `FALLBACK_CONFIDENCE`. All overridable by environment variables. |
-| Scripts | `backend/scripts/` | `smoke_llm.py` (compare models), `demo_flow.py` (narrated run for the demo), `export_mock_data.py` (data and types for the frontend). |
-| API and database | `backend/app/api`, `db`, `main.py` **(open PR #12)** | Cases, propose, approve, reject, audit, `/health`, `/metrics`, Postgres tables, append-only audit trigger. Not on `main` yet. |
-| Frontend | `frontend/` | Manager screens. On `main` it runs on built-in mock data. Screens against the real API are in open PRs #12 to #14. |
+| Settings | `backend/app/ai/settings.py` | Thresholds, retry budget (2 calls), deadline (25 s), `LLM_MAX_RPM`, `FALLBACK_CONFIDENCE`. All overridable by environment variables. |
+| LLM guard **(PR #19)** | `backend/app/ai/guard.py` | `RateLimiter` (sliding window, moved from the smoke script), `RateLimitedLLM` (waits for a slot, or fails if the wait would pass the deadline so the workflow falls back), `InstrumentedLLM` (latency and error counts for `/metrics`). Applied in the API only. |
+| Scripts | `backend/scripts/`, `scripts/` | `smoke_llm.py` (compare models), `evaluate.py`, `demo_flow.py` (narrated run), `export_mock_data.py`, `export_openapi.py`; at the repo root `load_test.py`, `demo_seed.sh`, `clean_clone_check.sh` (PR #19 and the docs PR). |
+| API and database | `backend/app/api`, `db`, `main.py` | Cases, propose, approve, reject, audit, `/health`, `/metrics`, Postgres tables, append-only audit trigger (PR #12, merged). **(PR #19)** adds `POST /api/analysis/run`, `GET /api/timecards`, `GET /api/policies/search` and the AI safety metrics. |
+| Frontend | `frontend/` | Manager screens, on built-in mock data or the real API (PRs #12 to #14, merged). |
 | Evaluation | `backend/tests/golden`, `backend/scripts/evaluate.py` | A golden set of 40 cases and the script that writes `docs/evaluation_report.md` (PR #15, merged). |
+| System test **(PR #19)** | `backend/tests/system/` | The real API as a separate process, over HTTP, against a pgvector database, with LLM failure injection. |
 
 ## Where each safety check sits
 
@@ -75,10 +79,13 @@ flowchart TD
 | Grounded citations | citation check in `run_workflow` | Invented policy. Every cited clause id must be one that was retrieved above the minimum score, and at least one is required. Quotes on the final proposal are copied from the retrieved text, never from model output. |
 | Rule validation | `validate_proposal` | A wrong fix. It checks the kind of fix, what it touches, the 12 hour limit, the 10 hour rest rule, the break deduction, whether the problem is really gone, and whether a new violation appears. |
 | Retry budget and deadline | top of the LLM loop | A slow or looping model. At most 2 model calls and 25 seconds per proposal, whatever mix of failures happens. |
+| Rate guard **(PR #19)** | `guard_llm` in the propose endpoint | Hammering a provider with a rate limit. Real calls wait for a slot under `LLM_MAX_RPM` (default 5 a minute, per process, so per replica); if the wait would pass the deadline the call fails and the workflow falls back. The mock is never limited. |
 | Fallback | `fallback()` in `run_workflow` | A model that is down, rate limited, or wrong. The rule-based fix is used, and it is validated too. |
 | Escalation | `escalate()` in `run_workflow` | Cases with no safe automatic answer. The result is a `FLAG_FOR_MANAGER` fix with no changes. Reasons: `NO_POLICY_MATCH`, `NO_BASELINE_FIX`, `BASELINE_FIX_INVALID`, `LOW_CONFIDENCE`. |
-| Human decision | manager Approve or Reject **(open PR #12)** | Any change without a person. Only an approval applies a fix, and an escalated case cannot be approved. |
-| Audit trail | events from `run_workflow`; storage **(open PR #12)** | Hidden steps. Every step has an event. In the open PR the table is append-only (a database trigger rejects updates and deletes). |
+| Human decision | manager Approve or Reject endpoints | Any change without a person. Only an approval applies a fix, in one transaction with the decision and its audit events; an escalated case cannot be approved; a second approval is refused. |
+| Audit trail | events from `run_workflow`, the analysis and decision endpoints | Hidden steps. Every step has an event. The table is append-only: a database trigger rejects updates and deletes (checked by the system test). |
+| Demo reset endpoint | `require_dev_seed` | A wipe of all data. `POST /api/dev/seed` answers 404 unless `ENABLE_DEV_SEED=true`, and the check runs before the database is touched. |
+| Metrics **(PR #19)** | `/metrics` | Silent failure. Counters for proposals by source, validator rejections, escalations by reason and LLM errors by kind, and a latency histogram for LLM calls. |
 
 ## The two retrievers
 
@@ -91,10 +98,12 @@ flowchart TD
 
 ## What runs where today
 
-- On `main`: everything in the flow down to "Proposal: PENDING_REVIEW plus audit events", the
-  scripts, the golden set and evaluation, the mock data for the frontend, and the frontend on mock
-  data.
-- In open PRs: the API and database (#12), the polished screens (#13), and Prettier and the OpenAPI
-  file (#14).
-- Not built: Docker images, Kubernetes manifests and CI. See Satyam's Docker and Kubernetes PRs
-  when they exist; none exists yet.
+- On `main`: the whole flow (detection, retrieval, model, checks, proposal), the API and database,
+  approve and reject with the append-only audit trail, the frontend against the real API or on mock
+  data, the golden set and evaluation, Docker Compose, Kubernetes manifests for Postgres and the
+  frontend, and CI for the backend (ruff, pytest without a database) and the frontend.
+- In PR #19 (open): `POST /api/analysis/run` so real timecards go in and cases come out, the
+  timecards list and policy search, the LLM rate guard, the new metrics, the system test and the
+  load test. These ran locally; CI does not run the database or system tests yet (see
+  [ci-additions.md](ci-additions.md)).
+- Not built: the backend in the Kubernetes manifests, a public deployment, login and roles.
