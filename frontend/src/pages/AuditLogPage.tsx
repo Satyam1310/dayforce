@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { Empty, ErrorState, Loading } from '../components/States'
 import { useAsync } from '../hooks/useAsync'
+import { usePageTitle } from '../hooks/usePageTitle'
+import { describeValue } from '../lib/describe'
 import { formatDateTime, humanize } from '../lib/format'
 
 function actorClass(actor: string): string {
@@ -11,8 +13,48 @@ function actorClass(actor: string): string {
   return 'actor actor-manager'
 }
 
+/** Event details as short label/value pairs instead of raw JSON.
+ *  Values are rendered as plain text (they can contain untrusted comments). */
+function Payload({ payload }: { payload: Record<string, unknown> }) {
+  const entries = Object.entries(payload).filter(
+    ([, v]) => v !== null && v !== undefined && v !== '',
+  )
+  if (entries.length === 0) return <span className="hint">No details</span>
+  return (
+    <dl className="kv">
+      {entries.map(([key, value]) => (
+        <div key={key}>
+          <dt>{humanize(key)}</dt>
+          <dd className={key === 'comment' ? 'kv-quote' : undefined}>
+            {key === 'comment' ? `“${String(value)}”` : formatDetail(value)}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function formatDetail(value: unknown): string {
+  if (typeof value === 'number')
+    return value <= 1 && value > 0 ? `${Math.round(value * 100)}%` : String(value)
+  if (Array.isArray(value)) {
+    return (
+      value
+        .map((v) =>
+          typeof v === 'object' && v && 'clause_id' in v
+            ? String((v as { clause_id: string }).clause_id)
+            : describeValue(v),
+        )
+        .join(', ') || 'none'
+    )
+  }
+  if (typeof value === 'object') return Object.keys(value as object).length + ' fields'
+  return describeValue(value)
+}
+
 export function AuditLogPage() {
   const [params, setParams] = useSearchParams()
+  usePageTitle('Audit log')
   const entityId = params.get('entity_id') ?? ''
   const [input, setInput] = useState(entityId)
   const { data, error, loading, reload } = useAsync(
@@ -100,7 +142,7 @@ export function AuditLogPage() {
                   </td>
                   <td>
                     {/* payload may contain untrusted text: React renders it as plain text */}
-                    <code className="payload">{JSON.stringify(ev.payload)}</code>
+                    <Payload payload={ev.payload} />
                   </td>
                 </tr>
               )

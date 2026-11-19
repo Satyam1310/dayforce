@@ -43,3 +43,18 @@ export function describeValue(value: unknown, timecard?: Timecard): string {
   if (typeof value === 'string' && value in RULE_LABELS) return RULE_LABELS[value]
   return formatValue(value)
 }
+
+// The database may return evidence keys in any order; show them in a sensible one:
+// the rule first, then starts before ends, ins before outs, previous before next.
+const KEY_RANK: [RegExp, number][] = [
+  [/^rule$/, 0],
+  [/^(previous|clock_in|kept|week_start)/, 1],
+  [/^(next|clock_out|conflicting)/, 2],
+  [/_start$/, 1],
+  [/_end$/, 2],
+]
+
+export function orderEvidence(evidence: Record<string, unknown>): [string, unknown][] {
+  const rank = (key: string) => KEY_RANK.find(([re]) => re.test(key))?.[1] ?? 3
+  return Object.entries(evidence).sort(([a], [b]) => rank(a) - rank(b))
+}

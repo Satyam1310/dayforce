@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
+import { Avatar } from '../components/Avatar'
 import { SeverityBadge, SourceBadge, StatusBadge } from '../components/Badges'
+import { Icon } from '../components/Icon'
+import { Toast } from '../components/Toast'
 import { CaseJourney } from '../components/CaseJourney'
 import { CitationList } from '../components/CitationList'
 import { DecisionForm } from '../components/DecisionForm'
@@ -10,8 +13,9 @@ import { ErrorState, Loading } from '../components/States'
 import { Timeline } from '../components/Timeline'
 import { ValidationPanel } from '../components/ValidationPanel'
 import { useAsync } from '../hooks/useAsync'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { formatDate, formatDateTime, formatPercent, humanize, shortId } from '../lib/format'
-import { describeValue } from '../lib/describe'
+import { describeValue, orderEvidence } from '../lib/describe'
 import { POLICY_CLAUSES } from '../lib/policy'
 import { summarize } from '../lib/summary'
 import type { AuditEvent, ExceptionDetail, Proposal } from '../types/api'
@@ -85,6 +89,8 @@ function ExceptionDetailView({ id }: { id: string }) {
   const [generating, setGenerating] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+  const clearFlash = useCallback(() => setFlash(null), [])
+  usePageTitle(data ? humanize(data.exception.type) : 'Case')
 
   async function generateProposal() {
     setGenerating(true)
@@ -108,11 +114,13 @@ function ExceptionDetailView({ id }: { id: string }) {
   return (
     <section>
       <Link to="/exceptions" className="back">
+        <Icon name="back" size={16} />
         Back to the queue
       </Link>
 
       <header className="case-head">
-        <div>
+        <Avatar id={exception.employee_id} size="l" />
+        <div className="case-head-text">
           <h1>{humanize(exception.type)}</h1>
           <p className="case-meta">
             {summarize(exception)}.{' '}
@@ -135,9 +143,16 @@ function ExceptionDetailView({ id }: { id: string }) {
         </div>
       )}
       {flash && (
-        <div className="banner banner-success" role="status">
-          {flash} <Link to={`/audit?entity_id=${proposal?.id ?? ''}`}>See it in the audit log</Link>
-        </div>
+        <Toast
+          message={flash}
+          tone={flash.startsWith('Fix approved') ? 'success' : 'neutral'}
+          onClose={clearFlash}
+          action={
+            <Link to={`/audit?entity_id=${proposal?.id ?? ''}`} className="toast-link">
+              See it in the audit log
+            </Link>
+          }
+        />
       )}
 
       <div className="case-layout">
@@ -145,7 +160,7 @@ function ExceptionDetailView({ id }: { id: string }) {
           <section className="panel">
             <h2>What the rule check found</h2>
             <dl className="evidence">
-              {Object.entries(exception.evidence).map(([key, value]) => (
+              {orderEvidence(exception.evidence).map(([key, value]) => (
                 <div key={key}>
                   <dt>{humanize(key)}</dt>
                   <dd>{describeValue(value, timecard)}</dd>
