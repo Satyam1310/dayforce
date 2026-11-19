@@ -4,9 +4,15 @@ import { ApiError } from '../api'
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="state" role="status">
-      <span className="spinner" aria-hidden="true" />
-      {label}
+    <div className="skeleton" role="status">
+      <span className="visually-hidden">{label}</span>
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="skeleton-row" aria-hidden="true">
+          <span className="skeleton-circle" />
+          <span className="skeleton-line" style={{ width: `${60 - i * 8}%` }} />
+          <span className="skeleton-line short" />
+        </div>
+      ))}
     </div>
   )
 }

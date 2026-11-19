@@ -1,6 +1,8 @@
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
+import { Avatar } from '../components/Avatar'
 import { StatusBadge } from '../components/Badges'
+import { Icon } from '../components/Icon'
 import { Empty, ErrorState, Loading } from '../components/States'
 import { useAsync } from '../hooks/useAsync'
 import { formatDate, formatPercent, humanize, shortId } from '../lib/format'
@@ -59,6 +61,7 @@ function ProposalCell({ proposal }: { proposal: Proposal | null | undefined }) {
 export function ExceptionsListPage() {
   // Filters live in the URL (?type=...&status=...) so a filtered view can be shared.
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
   const type = EXCEPTION_TYPES.find((t) => t === params.get('type'))
   const status = EXCEPTION_STATUSES.find((s) => s === params.get('status'))
 
@@ -151,19 +154,33 @@ export function ExceptionsListPage() {
               <th>Work date</th>
               <th>Fix</th>
               <th>Status</th>
+              <th aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
             {rows.map(({ exception: e, proposal }) => (
-              <tr key={e.id} className={`sev-row sev-row-${e.severity.toLowerCase()}`}>
+              <tr
+                key={e.id}
+                className={`sev-row sev-row-${e.severity.toLowerCase()}`}
+                // the whole row opens the case; the title link keeps it keyboard-accessible
+                onClick={() => navigate(`/exceptions/${e.id}`)}
+              >
                 <td>
                   <Link to={`/exceptions/${e.id}`} className="case-link">
                     {humanize(e.type)}
                   </Link>
                   <span className="case-summary">{summarize(e)}</span>
-                  <span className="case-severity">{humanize(e.severity)} severity</span>
+                  <span className={`sev-pill sev-pill-${e.severity.toLowerCase()}`}>
+                    {humanize(e.severity)} severity
+                  </span>
                 </td>
-                <td title={e.employee_id}>Employee {shortId(e.employee_id)}</td>
+                <td title={e.employee_id}>
+                  <span className="person">
+                    <Avatar id={e.employee_id} size="s" />
+                    <span className="visually-hidden">Employee </span>
+                    {shortId(e.employee_id)}
+                  </span>
+                </td>
                 <td className="nowrap">{formatDate(e.work_date)}</td>
                 <td>
                   <ProposalCell proposal={proposal} />
@@ -171,6 +188,9 @@ export function ExceptionsListPage() {
                 <td>
                   <StatusBadge status={e.status} />
                   {e.status === 'ESCALATED' && <span className="needs-manager">Needs manager</span>}
+                </td>
+                <td className="row-go" aria-hidden="true">
+                  <Icon name="chevron" size={16} />
                 </td>
               </tr>
             ))}

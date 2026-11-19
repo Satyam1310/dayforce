@@ -77,7 +77,7 @@ export function Timeline({ timecard, proposedChanges = [] }: Props) {
                 style={{ left: pct(start), width: `calc(${pct(end)} - ${pct(start)})` }}
                 title={`${formatTime(s.start)}–${formatTime(s.end)} at ${s.location_id}`}
               >
-                {formatTime(s.start)}–{formatTime(s.end)} · {s.location_id}
+                {formatTime(s.start)}–{formatTime(s.end)}, {s.location_id}
               </div>
             </div>
           </div>
