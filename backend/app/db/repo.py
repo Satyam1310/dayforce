@@ -189,8 +189,7 @@ def list_audit(
     """Newest first. With entity_ids, only events about those entities."""
     if entity_ids:
         rows = conn.execute(
-            "SELECT doc FROM audit_events WHERE entity_id = ANY(%s) ORDER BY ts DESC, id"
-            " LIMIT %s",
+            "SELECT doc FROM audit_events WHERE entity_id = ANY(%s) ORDER BY ts DESC, id LIMIT %s",
             (entity_ids, limit),
         ).fetchall()
     else:

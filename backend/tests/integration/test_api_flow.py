@@ -28,6 +28,7 @@ def client(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "mock")
     monkeypatch.setenv("LLM_MOCK_MODE", "ok")
     monkeypatch.setenv("RETRIEVER", "memory")
+    monkeypatch.setenv("ENABLE_DEV_SEED", "true")  # these tests reset the data on purpose
     from app.main import create_app
 
     with TestClient(create_app()) as c:
@@ -47,9 +48,31 @@ def test_health_ok(client):
     assert client.get("/health").json() == {"status": "ok", "database": "ok"}
 
 
+def test_seed_is_404_and_deletes_nothing_when_the_flag_is_off(client, monkeypatch):
+    seed(client)
+    before = len(client.get("/api/cases").json())
+    monkeypatch.delenv("ENABLE_DEV_SEED")
+    r = client.post("/api/dev/seed", params={"with_history": False})
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "NOT_FOUND"
+    assert len(client.get("/api/cases").json()) == before == 8  # still all 8 cases
+    assert client.get(f"/api/cases/{CASE(7)}").json()["exception"]["status"] == "RESOLVED"
+
+
+def test_seed_works_when_the_flag_is_on(client, monkeypatch):
+    monkeypatch.setenv("ENABLE_DEV_SEED", "true")
+    r = client.post("/api/dev/seed")
+    assert r.status_code == 200
+    assert r.json()["exceptions"] == 8
+
+
 def test_seed_counts(client):
     assert seed(client) == {
-        "timecards": 8, "exceptions": 8, "proposals": 7, "decisions": 2, "audit_events": 18
+        "timecards": 8,
+        "exceptions": 8,
+        "proposals": 7,
+        "decisions": 2,
+        "audit_events": 18,
     }
     open_only = seed(client, with_history=False)
     assert open_only["proposals"] == 0 and open_only["exceptions"] == 7

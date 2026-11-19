@@ -13,6 +13,7 @@ docker run -d --name dayforce-db -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app \
 # 2. Settings: env vars only. For local dev put them in backend/.env (gitignored):
 #    DATABASE_URL=postgresql://app:app@localhost:5432/timecards
 #    LLM_PROVIDER=mock            # or openai_compatible + LLM_BASE_URL / LLM_MODEL / LLM_API_KEY
+#    ENABLE_DEV_SEED=true         # local demo only: enables POST /api/dev/seed (wipes data!)
 
 # 3. API (creates the tables on startup)
 cd backend
@@ -37,7 +38,7 @@ python -m app.ai.ingest          # optional: embed the policy into policy_chunks
 | `POST /api/cases/{id}/approve` | Body `{ manager_id, comment? }`. Applies the fix, resolves the case, returns `CaseDetail` | 404, 409 `CASE_ESCALATED`, 409 `NO_PROPOSAL`, 409 `ALREADY_DECIDED`, 422 |
 | `POST /api/cases/{id}/reject` | Body `{ manager_id, comment }` (comment required). Nothing changes on the timecard; case back to `OPEN` | same as approve, 422 `COMMENT_REQUIRED` |
 | `GET /api/audit?entity_id=` | `AuditEvent[]`, newest first | |
-| `POST /api/dev/seed?with_history=` | Demo only: reset and load the starting data | |
+| `POST /api/dev/seed?with_history=` | Demo only: reset and load the starting data. **Off by default**: only exists when `ENABLE_DEV_SEED=true`, otherwise 404 | 404 when the flag is off |
 
 A case id is the exception id. All objects are the models in `app/contracts/models.py`,
 unchanged. Every error: `{ "error": { "code", "message", "request_id" } }`.
@@ -59,6 +60,8 @@ unchanged. Every error: `{ "error": { "code", "message", "request_id" } }`.
 - **Parameterised SQL only.**
 - **Logs**: JSON lines with a request id; no request bodies, notes, DSNs or keys are logged.
 - **Only a manager's approval changes a timecard.** Propose never does.
+- **The seed endpoint is off unless `ENABLE_DEV_SEED=true`** (it wipes all data), so a deployed
+  API answers 404 for it. `python -m app.db.seed` (run by hand) works without the flag.
 
 ## Tests
 

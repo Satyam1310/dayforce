@@ -54,8 +54,9 @@ def test_edit_punch_changes_only_that_punch():
         tc,
         fix(
             FixAction.EDIT_PUNCH,
-            FieldChange(target_id="p1", field="punch.timestamp", old=None,
-                        new="2026-03-10T12:30:00+00:00"),
+            FieldChange(
+                target_id="p1", field="punch.timestamp", old=None, new="2026-03-10T12:30:00+00:00"
+            ),
         ),
     )
     assert out.punches[0].timestamp == ts("03:30")
@@ -65,8 +66,11 @@ def test_edit_punch_changes_only_that_punch():
 def test_deduct_break_adds_a_30_minute_break_in_the_middle():
     tc = timecard(punches=(("IN", "03:30"), ("OUT", "11:30")))
     out = apply_fix(
-        tc, fix(FixAction.DEDUCT_BREAK, FieldChange(target_id="tc-1", field="break_minutes",
-                                                     old="0", new="30"))
+        tc,
+        fix(
+            FixAction.DEDUCT_BREAK,
+            FieldChange(target_id="tc-1", field="break_minutes", old="0", new="30"),
+        ),
     )
     kinds = [p.type for p in out.punches]
     assert kinds == [PunchType.IN, PunchType.BREAK_START, PunchType.BREAK_END, PunchType.OUT]
@@ -78,8 +82,10 @@ def test_reassign_shift_removes_it_from_this_timecard():
     tc = timecard(shifts=(("s1", "03:30", "12:30"), ("s2", "10:30", "15:30")))
     out = apply_fix(
         tc,
-        fix(FixAction.REASSIGN_SHIFT, FieldChange(target_id="s2", field="shift.employee_id",
-                                                   old=EMP, new="UNASSIGNED")),
+        fix(
+            FixAction.REASSIGN_SHIFT,
+            FieldChange(target_id="s2", field="shift.employee_id", old=EMP, new="UNASSIGNED"),
+        ),
     )
     assert [s.id for s in out.shifts] == ["s1"]
 
@@ -94,12 +100,18 @@ def test_flag_for_manager_changes_nothing():
     [
         fix(FixAction.ADD_PUNCH, FieldChange(target_id="x", field="salary", new="1")),
         fix(FixAction.ADD_PUNCH, FieldChange(target_id="x", field="punch.OUT", new="not a date")),
-        fix(FixAction.ADD_PUNCH, FieldChange(target_id="x", field="punch.OUT",
-                                             new="2026-03-10T12:30:00")),  # no timezone
-        fix(FixAction.EDIT_PUNCH, FieldChange(target_id="nope", field="punch.timestamp",
-                                              new="2026-03-10T12:30:00Z")),
-        fix(FixAction.DEDUCT_BREAK, FieldChange(target_id="x", field="break_minutes",
-                                                old="0", new="30")),  # no OUT punch
+        fix(
+            FixAction.ADD_PUNCH,
+            FieldChange(target_id="x", field="punch.OUT", new="2026-03-10T12:30:00"),
+        ),  # no timezone
+        fix(
+            FixAction.EDIT_PUNCH,
+            FieldChange(target_id="nope", field="punch.timestamp", new="2026-03-10T12:30:00Z"),
+        ),
+        fix(
+            FixAction.DEDUCT_BREAK,
+            FieldChange(target_id="x", field="break_minutes", old="0", new="30"),
+        ),  # no OUT punch
     ],
 )
 def test_bad_fixes_are_refused(the_fix):
