@@ -62,3 +62,10 @@ def test_missing_database_url_is_a_clear_503(monkeypatch):
         assert r.status_code == 503
         assert r.json()["error"]["code"] == "DB_NOT_CONFIGURED"
         assert c.get("/health").status_code == 503
+
+
+def test_dev_seed_is_404_by_default(client, monkeypatch):
+    monkeypatch.delenv("ENABLE_DEV_SEED", raising=False)
+    r = client.post("/api/dev/seed")
+    assert r.status_code == 404  # not 503: the flag check runs before any DB access
+    assert r.json()["error"]["code"] == "NOT_FOUND"
