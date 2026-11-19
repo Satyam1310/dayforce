@@ -13,10 +13,11 @@ import pytest
 from app.ai.llm import LLMError, MockLLM, OpenAICompatibleLLM
 from app.ai.retrieval import InMemoryRetriever
 from app.ai.settings import AISettings
-from app.ai.workflow import always_pass_validator, run_workflow
+from app.ai.workflow import run_workflow
 from app.contracts import PolicyConfig
 from scripts import smoke_llm
 from scripts.smoke_llm import CallStats, GuardedLLM, RateLimiter
+from tests.unit.ai.helpers import pass_validator
 
 S = AISettings()
 SECRET = "sk-test-secret-key-123"
@@ -117,7 +118,7 @@ def test_throttle_wait_is_not_counted_against_latency_or_the_25s_deadline():
         case,
         retriever=InMemoryRetriever(),
         llm=llm,
-        validator=always_pass_validator,
+        validator=pass_validator,
         cfg=PolicyConfig(),
         settings=settings,
         limiter=lim,
@@ -155,7 +156,7 @@ def test_429_falls_back_to_the_rule_based_fix(monkeypatch):
         tc,
         retriever=InMemoryRetriever(),
         llm=guarded,
-        validator=always_pass_validator,
+        validator=pass_validator,
         cfg=PolicyConfig(),
         settings=S,
     )

@@ -27,6 +27,7 @@ from app.contracts import (
     ValidationResult,
     Violation,
 )
+from app.validator import validate_proposal
 
 from .llm import LLM, LLMError, build_llm
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPT, build_user_prompt, parse_llm_output
@@ -36,13 +37,6 @@ from .settings import FALLBACK_CONFIDENCE, AISettings
 Validator = Callable[[Timecard, DetectedException, Fix, PolicyConfig], ValidationResult]
 
 TOP_K = 3
-
-
-def always_pass_validator(
-    timecard: Timecard, exc: DetectedException, fix: Fix, cfg: PolicyConfig
-) -> ValidationResult:
-    """Placeholder until Ankit's validate_proposal lands. Passes everything."""
-    return ValidationResult(passed=True, violations=[])
 
 
 def _flag_fix() -> Fix:
@@ -254,7 +248,7 @@ def generate_proposal(exc: DetectedException, timecard: Timecard) -> Proposal:
         timecard,
         retriever=get_retriever(s),
         llm=build_llm(s),
-        validator=always_pass_validator,  # TODO: Ankit's validate_proposal
+        validator=validate_proposal,
         cfg=PolicyConfig(),
         settings=s,
     )

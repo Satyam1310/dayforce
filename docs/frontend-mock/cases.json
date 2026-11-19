@@ -64,26 +64,37 @@
   },
   {
     "exception": {
-      "id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "type": "OVERTIME_RISK",
       "severity": "MEDIUM",
       "employee_id": "2375f0d7-292a-5ec2-857c-6787bd432753",
-      "timecard_id": "28611d62-3f56-57c8-9a5b-f73d337abfb8",
+      "timecard_id": "ca5cd1ee-6a9c-53ec-8449-83b1c9b4d5d6",
       "work_date": "2026-03-12",
       "evidence": {
-        "worked_hours": 31.5,
+        "rule": "WEEKLY_OT",
+        "week_start": "2026-03-09",
+        "worked_hours": 32.0,
         "remaining_scheduled_hours": 8.0,
-        "projected_hours": 39.5
+        "projected_hours": 40.0,
+        "overtime_risk_threshold": 38,
+        "weekly_ot_hours": 40,
+        "days_with_missing_punches": 0,
+        "remaining_shifts": [
+          {
+            "shift_id": "c109d8bc-ec81-5aac-bc59-5ced792be5da",
+            "start": "2026-03-13T03:30:00+00:00",
+            "hours": 8.0
+          }
+        ]
       },
       "policy_refs": [
-        "POL-TA-04",
-        "POL-TA-03"
+        "POL-TA-04"
       ],
       "baseline_fix": {
         "action": "REASSIGN_SHIFT",
         "changes": [
           {
-            "target_id": "c6c9a7ed-a097-5abe-aeb0-f1807862d4ec",
+            "target_id": "c109d8bc-ec81-5aac-bc59-5ced792be5da",
             "field": "employee_id",
             "old": "2375f0d7-292a-5ec2-857c-6787bd432753",
             "new": null
@@ -94,19 +105,19 @@
     },
     "proposal": {
       "id": "0ef57d1a-0aef-52ae-ae83-42bf9c3f8827",
-      "exception_id": "3ec16eee-df7d-5018-86f1-487884f2f32e",
+      "exception_id": "abb5a54f-f9b8-5761-860b-8169d7d8d772",
       "fix": {
         "action": "REASSIGN_SHIFT",
         "changes": [
           {
-            "target_id": "c6c9a7ed-a097-5abe-aeb0-f1807862d4ec",
+            "target_id": "c109d8bc-ec81-5aac-bc59-5ced792be5da",
             "field": "employee_id",
             "old": "2375f0d7-292a-5ec2-857c-6787bd432753",
             "new": null
           }
         ]
       },
-      "rationale": "Rule-based fix used (LLM output invalid). Follows POL-TA-04, POL-TA-03.",
+      "rationale": "Rule-based fix used (LLM output invalid). Follows POL-TA-04.",
       "citations": [
         {
           "clause_id": "POL-TA-04",
@@ -127,15 +138,18 @@
   },
   {
     "exception": {
-      "id": "392d4f2f-9c6b-5351-8c6d-28a4efd3b98c",
+      "id": "00116c4b-572c-520d-ab77-0945edfe7142",
       "type": "SCHEDULE_CONFLICT",
       "severity": "HIGH",
       "employee_id": "8c58ca56-ac51-503c-b318-366d3e8598ac",
       "timecard_id": "4bbd664d-baea-570c-9423-aa591588e94f",
       "work_date": "2026-03-13",
       "evidence": {
+        "rule": "OVERLAPPING_SHIFTS",
         "shift_a": "6684fab8-85f5-5e28-bee6-ecf6758babcd",
         "shift_b": "90b419a5-a0b9-5f58-af5e-9fa3de119069",
+        "keep_shift_id": "6684fab8-85f5-5e28-bee6-ecf6758babcd",
+        "reassign_shift_id": "90b419a5-a0b9-5f58-af5e-9fa3de119069",
         "overlap_hours": 2.0
       },
       "policy_refs": [
@@ -156,7 +170,7 @@
     },
     "proposal": {
       "id": "a9d072ad-c65d-5269-9279-3a993762144a",
-      "exception_id": "392d4f2f-9c6b-5351-8c6d-28a4efd3b98c",
+      "exception_id": "00116c4b-572c-520d-ab77-0945edfe7142",
       "fix": {
         "action": "REASSIGN_SHIFT",
         "changes": [
@@ -189,16 +203,18 @@
   },
   {
     "exception": {
-      "id": "5c9c4dab-8dbe-5960-b4d7-c45e931d2cea",
+      "id": "27414de6-fc89-53ea-a509-23d73d174785",
       "type": "POLICY_BREACH",
       "severity": "LOW",
       "employee_id": "282003e8-5a23-55f0-8b04-7352a4fa7123",
       "timecard_id": "fb047cb3-3f3b-5dab-98a8-160e7ff05ba7",
       "work_date": "2026-03-09",
       "evidence": {
+        "rule": "MEAL_BREAK",
         "shift_hours": 8.5,
+        "break_required_after_hours": 6,
         "break_minutes_logged": 0,
-        "rule": "meal break"
+        "min_break_minutes": 30
       },
       "policy_refs": [
         "POL-TA-02"
@@ -218,7 +234,7 @@
     },
     "proposal": {
       "id": "4c96a021-1111-5bfc-ad01-0be6fb302248",
-      "exception_id": "5c9c4dab-8dbe-5960-b4d7-c45e931d2cea",
+      "exception_id": "27414de6-fc89-53ea-a509-23d73d174785",
       "fix": {
         "action": "DEDUCT_BREAK",
         "changes": [
@@ -235,7 +251,7 @@
         {
           "clause_id": "POL-TA-02",
           "quote": "Meal break. Shifts longer than 6 hours need an unpaid break of at least 30 minutes. If no break is logged, deduct 30 minutes from the shift, unless the employee states that no break was taken, in which case the manager decides.",
-          "score": 0.4706
+          "score": 1.0
         }
       ],
       "confidence": 0.9,
@@ -251,17 +267,22 @@
   },
   {
     "exception": {
-      "id": "2b56915b-4dd0-57e1-8fc5-b9a87ced2d09",
+      "id": "1ae2b898-16a7-5d17-ae56-a67be0654ec2",
       "type": "MISSED_PUNCH",
       "severity": "MEDIUM",
       "employee_id": "cc77b971-3fd0-5b1a-a1e1-54137b3e8850",
       "timecard_id": "ef2f1745-6e3c-5a0b-903a-bc1a7c991c54",
       "work_date": "2026-03-10",
       "evidence": {
+        "rule": "MISSED_CLOCK_OUT",
         "clock_in": "2026-03-10T03:32:00+00:00",
         "clock_out": null,
+        "scheduled_shift_start": "2026-03-10T03:30:00+00:00",
         "scheduled_shift_end": "2026-03-10T12:30:00+00:00",
-        "resulting_shift_hours": 8.97
+        "resulting_shift_hours": 8.97,
+        "max_shift_hours": 12,
+        "previous_work_end": null,
+        "next_work_start": null
       },
       "policy_refs": [
         "POL-TA-01"
@@ -281,7 +302,7 @@
     },
     "proposal": {
       "id": "def1e84e-43a2-5fcb-a7fe-5d966f821278",
-      "exception_id": "2b56915b-4dd0-57e1-8fc5-b9a87ced2d09",
+      "exception_id": "1ae2b898-16a7-5d17-ae56-a67be0654ec2",
       "fix": {
         "action": "ADD_PUNCH",
         "changes": [
@@ -314,26 +335,37 @@
   },
   {
     "exception": {
-      "id": "230b9fc2-221d-5f97-8721-3f5a1bb2c8c3",
+      "id": "2b87f3bc-5858-5956-bbc6-b9eff972da2c",
       "type": "OVERTIME_RISK",
       "severity": "HIGH",
       "employee_id": "35f85c99-8edb-59f1-a05f-0fb2adf3f65c",
-      "timecard_id": "97bd8878-738e-547e-a713-2f5ca6abbbe8",
+      "timecard_id": "dcb17550-1506-5f14-a2bc-f6c711c72b3e",
       "work_date": "2026-03-05",
       "evidence": {
-        "worked_hours": 31.5,
-        "remaining_scheduled_hours": 8.0,
-        "projected_hours": 39.5
+        "rule": "WEEKLY_OT",
+        "week_start": "2026-03-02",
+        "worked_hours": 32.0,
+        "remaining_scheduled_hours": 10.0,
+        "projected_hours": 42.0,
+        "overtime_risk_threshold": 38,
+        "weekly_ot_hours": 40,
+        "days_with_missing_punches": 0,
+        "remaining_shifts": [
+          {
+            "shift_id": "adefb202-4b7b-57a4-838e-cd20f474d14b",
+            "start": "2026-03-06T03:30:00+00:00",
+            "hours": 10.0
+          }
+        ]
       },
       "policy_refs": [
-        "POL-TA-04",
-        "POL-TA-03"
+        "POL-TA-04"
       ],
       "baseline_fix": {
         "action": "REASSIGN_SHIFT",
         "changes": [
           {
-            "target_id": "3c6028cf-14ed-566d-afec-bea17b99e06b",
+            "target_id": "adefb202-4b7b-57a4-838e-cd20f474d14b",
             "field": "employee_id",
             "old": "35f85c99-8edb-59f1-a05f-0fb2adf3f65c",
             "new": null
@@ -344,12 +376,12 @@
     },
     "proposal": {
       "id": "846168fc-f361-5089-9bd2-467d5d38921b",
-      "exception_id": "230b9fc2-221d-5f97-8721-3f5a1bb2c8c3",
+      "exception_id": "2b87f3bc-5858-5956-bbc6-b9eff972da2c",
       "fix": {
         "action": "REASSIGN_SHIFT",
         "changes": [
           {
-            "target_id": "3c6028cf-14ed-566d-afec-bea17b99e06b",
+            "target_id": "adefb202-4b7b-57a4-838e-cd20f474d14b",
             "field": "employee_id",
             "old": "35f85c99-8edb-59f1-a05f-0fb2adf3f65c",
             "new": null
@@ -377,15 +409,17 @@
   },
   {
     "exception": {
-      "id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "type": "POLICY_BREACH",
       "severity": "HIGH",
       "employee_id": "2c47605c-c42e-5833-a07d-15645ad19415",
       "timecard_id": "cd31272e-8000-5190-8904-2724bd3e3dc7",
       "work_date": "2026-03-06",
       "evidence": {
+        "rule": "DAILY_MAX",
         "worked_hours": 13.5,
-        "max_daily_hours": 12
+        "max_daily_hours": 12,
+        "reason_no_fix": "a day over the maximum needs manager review"
       },
       "policy_refs": [
         "POL-TA-03"
@@ -395,7 +429,7 @@
     },
     "proposal": {
       "id": "6999deb1-5b0f-563b-9f74-b9c503abf6b1",
-      "exception_id": "bc1669e3-d3f6-5254-bf64-1299823b2a17",
+      "exception_id": "2f18bcc8-585f-5680-b06b-383c291f8741",
       "fix": {
         "action": "FLAG_FOR_MANAGER",
         "changes": []
@@ -412,15 +446,18 @@
   },
   {
     "exception": {
-      "id": "cd3e9600-9000-58a1-b988-d40fe598375b",
+      "id": "a5ab4d16-a52e-5347-af18-9800408ec2b1",
       "type": "SCHEDULE_CONFLICT",
       "severity": "HIGH",
       "employee_id": "1d6ea33a-19b1-5359-915e-f208177a055e",
       "timecard_id": "a12eb40f-ce0a-56c2-9b14-847280190be4",
       "work_date": "2026-03-04",
       "evidence": {
+        "rule": "OVERLAPPING_SHIFTS",
         "shift_a": "76e5fc12-0907-5c07-8d91-2ad409a0b63d",
         "shift_b": "8d9f3636-efa0-5e77-80d4-36e6d0ab4f59",
+        "keep_shift_id": "76e5fc12-0907-5c07-8d91-2ad409a0b63d",
+        "reassign_shift_id": "8d9f3636-efa0-5e77-80d4-36e6d0ab4f59",
         "overlap_hours": 2.0
       },
       "policy_refs": [
@@ -441,7 +478,7 @@
     },
     "proposal": {
       "id": "99190dd7-33ed-5e5d-a72f-6011d309f7bc",
-      "exception_id": "cd3e9600-9000-58a1-b988-d40fe598375b",
+      "exception_id": "a5ab4d16-a52e-5347-af18-9800408ec2b1",
       "fix": {
         "action": "FLAG_FOR_MANAGER",
         "changes": []

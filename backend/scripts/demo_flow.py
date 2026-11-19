@@ -22,8 +22,9 @@ from app.ai.llm import LLM, build_llm
 from app.ai.prompts import sanitize_notes
 from app.ai.retrieval import Retriever, build_query, get_retriever
 from app.ai.settings import AISettings
-from app.ai.workflow import Validator, always_pass_validator, run_workflow
+from app.ai.workflow import Validator, run_workflow
 from app.contracts import AuditEvent, PolicyConfig
+from app.validator import validate_proposal
 
 from .smoke_llm import CASE_BUILDERS, load_env
 
@@ -72,7 +73,7 @@ def run_demo(
     settings: AISettings,
     llm: LLM,
     retriever: Retriever,
-    validator: Validator = always_pass_validator,
+    validator: Validator = validate_proposal,
     out: Callable[[str], None] = print,
     delay: float = 0.0,
 ) -> str:
