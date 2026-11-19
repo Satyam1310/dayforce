@@ -3,14 +3,14 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { CURRENT_MANAGER_ID } from '../config'
-import type { Decision, DecisionValue } from '../types/api'
+import type { DecisionValue } from '../types/api'
 
 interface Props {
-  proposalId: string
-  onDecided: (decision: Decision) => void
+  caseId: string
+  onDecided: (decision: DecisionValue) => void
 }
 
-export function DecisionForm({ proposalId, onDecided }: Props) {
+export function DecisionForm({ caseId, onDecided }: Props) {
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState<DecisionValue | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -25,12 +25,12 @@ export function DecisionForm({ proposalId, onDecided }: Props) {
     setError(null)
     setSubmitting(decision)
     try {
-      const result = await api.decide(proposalId, {
+      await api.decide(caseId, {
         decision,
         manager_id: CURRENT_MANAGER_ID,
         comment: trimmed || null,
       })
-      onDecided(result)
+      onDecided(decision)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the decision.')
     } finally {

@@ -1,9 +1,21 @@
-"""All /api/v1 endpoints (CLAUDE.md section 9)."""
+"""HTTP endpoints (Harsh's backend checklist; shapes from docs/frontend-mock/types.ts).
+
+    GET  /api/cases                 list cases, filter by status (and type)
+    GET  /api/cases/{id}            timecard, exception, proposal, decision, audit events
+    POST /api/cases/{id}/propose    run the AI workflow, save the proposal + its audit events
+    POST /api/cases/{id}/approve    manager approves the pending proposal (applies the fix)
+    POST /api/cases/{id}/reject     manager rejects it (nothing changes on the timecard)
+    GET  /api/audit                 audit trail, optional ?entity_id=
+    POST /api/dev/seed              demo only: reset and load the starting data
+
+A case id is the exception id. Every model in a response comes from app/contracts/models.py
+unchanged; CaseListItem and CaseDetail only group them.
+"""
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 import psycopg
@@ -19,7 +31,6 @@ from app.contracts import (
     Decision,
     DetectedException,
     ExceptionType,
-    PolicyCitation,
     PolicyConfig,
     Proposal,
     Timecard,
@@ -32,30 +43,35 @@ from app.services.apply_fix import FixNotApplicable, apply_fix
 
 from .errors import ApiError
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api")
 Conn = Annotated[psycopg.Connection, Depends(get_conn)]
-
-ExceptionStatus = Literal["OPEN", "PROPOSED", "ESCALATED", "RESOLVED"]
-
-
-# ---- response / request shapes not in models.py -------------------------------------------
+CaseStatus = Literal["OPEN", "PROPOSED", "ESCALATED", "RESOLVED"]
 
 
-class ExceptionDetail(BaseModel):
-    """GET /exceptions/{id}. Same fields as the frontend's ExceptionDetail and Harsh's draft
-    CaseDetail (docs/frontend-mock/types.ts)."""
+# ---- shapes that group contract models (docs/frontend-mock/types.ts) ---------------------
 
+
+class CaseListItem(BaseModel):
     exception: DetectedException
+    proposal: Proposal | None = None
+
+
+class CaseDetail(BaseModel):
     timecard: Timecard
-    proposal: Proposal | None
-    decision: Decision | None
+    exception: DetectedException
+    proposal: Proposal | None = None
+    decision: Decision | None = None
     audit_events: list[AuditEvent]
 
 
-class DecisionRequest(BaseModel):
-    decision: Literal["APPROVE", "REJECT"]
+class ApproveRequest(BaseModel):
     manager_id: str = Field(min_length=1, max_length=100)
     comment: str | None = Field(default=None, max_length=1000)
+
+
+class RejectRequest(BaseModel):
+    manager_id: str = Field(min_length=1, max_length=100)
+    comment: str = Field(min_length=1, max_length=1000)  # a rejection must say why
 
 
 class SeedResult(BaseModel):
@@ -66,16 +82,7 @@ class SeedResult(BaseModel):
     audit_events: int
 
 
-class AnalysisResult(BaseModel):
-    detected: int
-    created: int
-
-
 # ---- helpers -----------------------------------------------------------------------------
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 def _audit(
@@ -83,7 +90,7 @@ def _audit(
 ) -> AuditEvent:
     return AuditEvent(
         id=str(uuid.uuid4()),
-        ts=_now(),
+        ts=datetime.now(UTC),
         actor=actor,
         event_type=event_type,
         entity_type=entity_type,
@@ -101,137 +108,75 @@ def _validator() -> Validator:
     return validate_proposal
 
 
-def _must_get_exception(conn: psycopg.Connection, exception_id: str, **kw) -> DetectedException:
-    exc = repo.get_exception(conn, exception_id, **kw)
+def _get_case(conn: psycopg.Connection, case_id: str, *, lock: bool = False) -> DetectedException:
+    exc = repo.get_exception(conn, case_id, for_update=lock)
     if exc is None:
-        raise ApiError(404, "NOT_FOUND", f"Exception {exception_id} not found.")
+        raise ApiError(404, "NOT_FOUND", f"Case {case_id} not found.")
     return exc
 
 
-def _must_get_timecard(conn: psycopg.Connection, timecard_id: str) -> Timecard:
+def _get_timecard(conn: psycopg.Connection, timecard_id: str) -> Timecard:
     tc = repo.get_timecard(conn, timecard_id)
     if tc is None:
         raise ApiError(404, "NOT_FOUND", f"Timecard {timecard_id} not found.")
     return tc
 
 
-# ---- seed & analysis ---------------------------------------------------------------------
-
-
-@router.post("/seed/load", response_model=SeedResult, tags=["demo"])
-def seed_load(
-    conn: Conn,
-    with_history: Annotated[
-        bool,
-        Query(description="true: include past proposals/decisions; false: all cases OPEN"),
-    ] = True,
-) -> SeedResult:
-    """Demo/dev only: wipe the app tables and load the 8 demo cases."""
-    return SeedResult(**load_seed(conn, with_history=with_history))
-
-
-@router.post("/analysis/run", response_model=AnalysisResult, tags=["analysis"])
-def analysis_run(
-    conn: Conn,
-    week: Annotated[date | None, Query(description="Monday of the week, YYYY-MM-DD")] = None,
-) -> AnalysisResult:
-    """Run the rule detectors over a week's timecards and store new exceptions."""
-    try:
-        from app.domain.rules import detect_exceptions  # type: ignore[attr-defined]
-    except ImportError as e:
-        raise ApiError(
-            501, "DETECTORS_NOT_AVAILABLE", "The rule detectors are not installed yet."
-        ) from e
-
-    timecards = repo.list_timecards(conn, week_start=week)
-    found = detect_exceptions(timecards, PolicyConfig())
-    created = 0
-    events = []
-    for exc in found:
-        if repo.exception_exists(conn, exc.timecard_id, exc.type.value):
-            continue
-        repo.insert_exception(conn, exc)
-        created += 1
-        events.append(
-            _audit("system", "EXCEPTION_DETECTED", "exception", exc.id,
-                   type=exc.type.value, timecard_id=exc.timecard_id)
-        )
-    repo.insert_audit(conn, events)
-    return AnalysisResult(detected=len(found), created=created)
-
-
-# ---- read endpoints ----------------------------------------------------------------------
-
-
-@router.get("/timecards", response_model=list[Timecard], tags=["timecards"])
-def list_timecards(
-    conn: Conn,
-    employee_id: str | None = None,
-    week: Annotated[date | None, Query(description="Monday of the week, YYYY-MM-DD")] = None,
-) -> list[Timecard]:
-    return repo.list_timecards(conn, employee_id=employee_id, week_start=week)
-
-
-@router.get("/exceptions", response_model=list[DetectedException], tags=["exceptions"])
-def list_exceptions(
-    conn: Conn,
-    status: ExceptionStatus | None = None,
-    type: ExceptionType | None = None,  # query param name from CLAUDE.md
-) -> list[DetectedException]:
-    return repo.list_exceptions(conn, status=status, type_=type.value if type else None)
-
-
-@router.get("/exceptions/{exception_id}", response_model=ExceptionDetail, tags=["exceptions"])
-def get_exception(conn: Conn, exception_id: str) -> ExceptionDetail:
-    exc = _must_get_exception(conn, exception_id)
-    tc = _must_get_timecard(conn, exc.timecard_id)
+def _detail(conn: psycopg.Connection, case_id: str) -> CaseDetail:
+    exc = _get_case(conn, case_id)
+    tc = _get_timecard(conn, exc.timecard_id)
     proposal = repo.latest_proposal(conn, exc.id)
     decision = repo.get_decision_for(conn, proposal.id) if proposal else None
     entity_ids = [exc.id, tc.id, *repo.proposal_ids_for(conn, exc.id)]
-    return ExceptionDetail(
-        exception=exc,
+    return CaseDetail(
         timecard=tc,
+        exception=exc,
         proposal=proposal,
         decision=decision,
         audit_events=repo.list_audit(conn, entity_ids),
     )
 
 
-@router.get("/proposals/{proposal_id}", response_model=Proposal, tags=["proposals"])
-def get_proposal(conn: Conn, proposal_id: str) -> Proposal:
-    p = repo.get_proposal(conn, proposal_id)
-    if p is None:
-        raise ApiError(404, "NOT_FOUND", f"Proposal {proposal_id} not found.")
-    return p
+# ---- read --------------------------------------------------------------------------------
+
+
+@router.get("/cases", response_model=list[CaseListItem], tags=["cases"])
+def list_cases(
+    conn: Conn,
+    status: CaseStatus | None = None,
+    type: ExceptionType | None = None,  # same name as the field in the contract
+) -> list[CaseListItem]:
+    exceptions = repo.list_exceptions(conn, status=status, type_=type.value if type else None)
+    latest = repo.latest_proposals(conn, [e.id for e in exceptions])
+    return [CaseListItem(exception=e, proposal=latest.get(e.id)) for e in exceptions]
+
+
+@router.get("/cases/{case_id}", response_model=CaseDetail, tags=["cases"])
+def get_case(conn: Conn, case_id: str) -> CaseDetail:
+    return _detail(conn, case_id)
 
 
 @router.get("/audit", response_model=list[AuditEvent], tags=["audit"])
 def list_audit(conn: Conn, entity_id: str | None = None) -> list[AuditEvent]:
+    """Newest first."""
     return repo.list_audit(conn, [entity_id] if entity_id else None)
 
 
-@router.get("/policies/search", response_model=list[PolicyCitation], tags=["debug"])
-def search_policies(q: Annotated[str, Query(min_length=1)], k: int = 3) -> list[PolicyCitation]:
-    """Debug retrieval: what the AI would see for this query."""
-    return get_retriever(AISettings.from_env()).retrieve(q, k=max(1, min(k, 7)))
+# ---- propose -----------------------------------------------------------------------------
 
 
-# ---- AI proposal -------------------------------------------------------------------------
-
-
-@router.post("/exceptions/{exception_id}/propose", response_model=Proposal, tags=["proposals"])
-def propose(conn: Conn, exception_id: str) -> Proposal:
-    """Run the AI workflow (retrieve -> LLM -> citation check -> validator -> fallback /
-    escalate) and store the proposal as PENDING_REVIEW or ESCALATED. Never changes a timecard."""
-    exc = _must_get_exception(conn, exception_id, for_update=True)
+@router.post("/cases/{case_id}/propose", response_model=Proposal, tags=["cases"])
+def propose(conn: Conn, case_id: str) -> Proposal:
+    """Run the AI workflow (retrieve -> LLM -> citation check -> validator -> fallback or
+    escalate) and save the proposal plus every audit event it returns. Never changes a
+    timecard: only a manager's approval does."""
+    exc = _get_case(conn, case_id, lock=True)  # lock: two clicks cannot create two proposals
     if exc.status == "RESOLVED":
-        raise ApiError(409, "EXCEPTION_RESOLVED", "This exception is already resolved.")
+        raise ApiError(409, "CASE_RESOLVED", "This case is already resolved.")
     latest = repo.latest_proposal(conn, exc.id)
     if latest is not None and latest.status == "PENDING_REVIEW":
-        raise ApiError(
-            409, "PROPOSAL_PENDING", f"Proposal {latest.id} is already waiting for review."
-        )
-    tc = _must_get_timecard(conn, exc.timecard_id)
+        raise ApiError(409, "PROPOSAL_PENDING", "A proposal is already waiting for review.")
+    tc = _get_timecard(conn, exc.timecard_id)
 
     settings = AISettings.from_env()
     proposal, events = run_workflow(
@@ -255,57 +200,113 @@ def propose(conn: Conn, exception_id: str) -> Proposal:
 # ---- manager decision --------------------------------------------------------------------
 
 
-@router.post("/proposals/{proposal_id}/decision", response_model=Decision, tags=["proposals"])
-def decide(conn: Conn, proposal_id: str, body: DecisionRequest) -> Decision:
-    """Approve or reject. Only APPROVE changes the timecard; both are audited.
-    Runs in one transaction (see db.connection.get_conn)."""
-    proposal = repo.get_proposal(conn, proposal_id, for_update=True)  # blocks double-clicks
+def _pending_proposal(
+    conn: psycopg.Connection, case_id: str
+) -> tuple[DetectedException, Proposal]:
+    """The case (row-locked, so concurrent decisions queue up) and its PENDING proposal."""
+    exc = _get_case(conn, case_id, lock=True)
+    proposal = repo.latest_proposal(conn, exc.id)
+    if exc.status == "ESCALATED" or (proposal is not None and proposal.status == "ESCALATED"):
+        raise ApiError(
+            409,
+            "CASE_ESCALATED",
+            "This case is escalated: the AI could not safely propose a fix, so there is"
+            " nothing to approve. A manager must resolve it directly.",
+        )
     if proposal is None:
-        raise ApiError(404, "NOT_FOUND", f"Proposal {proposal_id} not found.")
+        raise ApiError(409, "NO_PROPOSAL", "This case has no proposal yet. Run propose first.")
     if proposal.status != "PENDING_REVIEW":
-        raise ApiError(409, "PROPOSAL_NOT_PENDING", f"Proposal is already {proposal.status}.")
-    comment = (body.comment or "").strip() or None
-    if body.decision == "REJECT" and not comment:
-        raise ApiError(422, "COMMENT_REQUIRED", "A comment is required to reject a proposal.")
+        raise ApiError(
+            409, "ALREADY_DECIDED", f"The proposal for this case is already {proposal.status}."
+        )
+    return exc, proposal
 
-    exc = _must_get_exception(conn, proposal.exception_id, for_update=True)
+
+def _record_decision(
+    conn: psycopg.Connection,
+    proposal: Proposal,
+    value: Literal["APPROVE", "REJECT"],
+    manager_id: str,
+    comment: str | None,
+) -> Decision:
     decision = Decision(
         id=str(uuid.uuid4()),
         proposal_id=proposal.id,
-        decision=body.decision,
-        manager_id=body.manager_id,
+        decision=value,
+        manager_id=manager_id,
         comment=comment,
-        decided_at=_now(),
+        decided_at=datetime.now(UTC),
     )
-    repo.insert_decision(conn, decision)
-    events: list[AuditEvent] = []
-
-    if body.decision == "APPROVE":
-        tc = _must_get_timecard(conn, exc.timecard_id)
-        try:
-            updated = apply_fix(tc, proposal.fix)
-        except FixNotApplicable as e:
-            raise ApiError(422, "FIX_NOT_APPLICABLE", str(e)) from e
-        repo.update_timecard(conn, updated)
-        repo.set_proposal_status(conn, proposal.id, "APPROVED")
-        repo.set_exception_status(conn, exc.id, "RESOLVED")
-        events.append(
-            _audit(body.manager_id, "DECISION_APPROVED", "proposal", proposal.id,
-                   decision_id=decision.id, exception_id=exc.id, comment=comment)
-        )
-        events.append(
-            _audit("system", "TIMECARD_UPDATED", "timecard", tc.id,
-                   exception_id=exc.id, action=proposal.fix.action.value,
-                   changes=[c.model_dump(mode="json") for c in proposal.fix.changes])
-        )
-    else:
-        repo.set_proposal_status(conn, proposal.id, "REJECTED")
-        repo.set_exception_status(conn, exc.id, "OPEN")  # same convention as docs/frontend-mock
-        events.append(
-            _audit(body.manager_id, "DECISION_REJECTED", "proposal", proposal.id,
-                   decision_id=decision.id, exception_id=exc.id, comment=comment)
-        )
-
-    repo.insert_audit(conn, events)
-    DECISIONS.labels(body.decision).inc()
+    repo.insert_decision(conn, decision)  # UNIQUE(proposal_id) is a second guard
+    DECISIONS.labels(value).inc()
     return decision
+
+
+@router.post("/cases/{case_id}/approve", response_model=CaseDetail, tags=["cases"])
+def approve(conn: Conn, case_id: str, body: ApproveRequest) -> CaseDetail:
+    """Approve the pending proposal: apply its fix to the timecard, resolve the case, audit.
+    All in one transaction; approving twice is refused (409), so a fix is applied once."""
+    exc, proposal = _pending_proposal(conn, case_id)
+    tc = _get_timecard(conn, exc.timecard_id)
+    try:
+        updated = apply_fix(tc, proposal.fix)
+    except FixNotApplicable as e:
+        raise ApiError(422, "FIX_NOT_APPLICABLE", str(e)) from e
+
+    comment = (body.comment or "").strip() or None
+    decision = _record_decision(conn, proposal, "APPROVE", body.manager_id, comment)
+    repo.update_timecard(conn, updated)
+    repo.set_proposal_status(conn, proposal.id, "APPROVED")
+    repo.set_exception_status(conn, exc.id, "RESOLVED")
+    repo.insert_audit(
+        conn,
+        [
+            _audit(
+                body.manager_id, "DECISION_APPROVED", "proposal", proposal.id,
+                decision_id=decision.id, exception_id=exc.id, comment=comment,
+            ),
+            _audit(
+                "system", "TIMECARD_UPDATED", "timecard", tc.id,
+                exception_id=exc.id, action=proposal.fix.action.value,
+                changes=[c.model_dump(mode="json") for c in proposal.fix.changes],
+            ),
+        ],
+    )
+    return _detail(conn, case_id)
+
+
+@router.post("/cases/{case_id}/reject", response_model=CaseDetail, tags=["cases"])
+def reject(conn: Conn, case_id: str, body: RejectRequest) -> CaseDetail:
+    """Reject the pending proposal. The timecard is not changed; the case goes back to OPEN
+    (a new proposal can be requested)."""
+    comment = body.comment.strip()
+    if not comment:
+        raise ApiError(422, "COMMENT_REQUIRED", "A comment is required to reject a proposal.")
+    exc, proposal = _pending_proposal(conn, case_id)
+    decision = _record_decision(conn, proposal, "REJECT", body.manager_id, comment)
+    repo.set_proposal_status(conn, proposal.id, "REJECTED")
+    repo.set_exception_status(conn, exc.id, "OPEN")
+    repo.insert_audit(
+        conn,
+        [
+            _audit(
+                body.manager_id, "DECISION_REJECTED", "proposal", proposal.id,
+                decision_id=decision.id, exception_id=exc.id, comment=comment,
+            )
+        ],
+    )
+    return _detail(conn, case_id)
+
+
+# ---- demo --------------------------------------------------------------------------------
+
+
+@router.post("/dev/seed", response_model=SeedResult, tags=["demo"])
+def seed(
+    conn: Conn,
+    with_history: Annotated[
+        bool, Query(description="true: past proposals/decisions too; false: every case OPEN")
+    ] = True,
+) -> SeedResult:
+    """Demo/dev only: reset the app tables and load the starting data."""
+    return SeedResult(**load_seed(conn, with_history=with_history))

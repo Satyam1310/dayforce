@@ -1,10 +1,16 @@
-"""Demo seed data: the same 8 cases the frontend mock uses (frontend/src/mocks/data.ts).
+"""Starting data: 8 demo cases. Case 1 is exactly the contract fixtures
+(backend/app/contracts/fixtures/: timecard, detected_exception, proposal_pending_review);
+the others add one case per exception type, an escalation, a rule-based fallback, an approved
+and a rejected case. Same data as the frontend mock (frontend/src/mocks/data.ts).
+The large evaluation set (>= 60 timecards + ground truth) is separate: data/seed/ (Ankit).
 
-BACKUP ONLY: the real seed set (>= 60 timecards + ground truth) is Ankit's job in data/seed/.
+Load it:  python -m app.db.seed               (with past proposals and decisions)
+          python -m app.db.seed --open        (every case OPEN, to run the AI live)
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import uuid
 from datetime import UTC, datetime
@@ -15,6 +21,7 @@ import psycopg
 from app.contracts import AuditEvent, Decision, DetectedException, Proposal, Timecard
 
 from . import repo
+from .connection import connect, init_schema
 
 SEED_PATH = Path(__file__).with_name("seed_data.json")
 
@@ -77,3 +84,22 @@ def load_seed(conn: psycopg.Connection, *, with_history: bool = True) -> dict[st
     repo.insert_audit(conn, events)
     return {"timecards": len(timecards), "exceptions": loaded, "proposals": 0, "decisions": 0,
             "audit_events": len(events)}
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="Reset the app tables and load the demo cases.")
+    ap.add_argument("--open", action="store_true", help="all cases OPEN, no past proposals")
+    args = ap.parse_args(argv)
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)  # backend/.env
+    with connect() as conn:
+        init_schema(conn)
+        counts = load_seed(conn, with_history=not args.open)
+        conn.commit()
+    print(json.dumps(counts))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

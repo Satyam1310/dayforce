@@ -23,7 +23,7 @@ def client(monkeypatch):
 
 
 def test_unknown_route_uses_the_error_shape(client):
-    r = client.get("/api/v1/nope")
+    r = client.get("/api/nope")
     assert r.status_code == 404
     body = r.json()["error"]
     assert body["code"] == "NOT_FOUND"
@@ -31,7 +31,7 @@ def test_unknown_route_uses_the_error_shape(client):
 
 
 def test_request_id_is_echoed(client):
-    r = client.get("/api/v1/nope", headers={"X-Request-ID": "abc123"})
+    r = client.get("/api/nope", headers={"X-Request-ID": "abc123"})
     assert r.headers["X-Request-ID"] == "abc123"
     assert r.json()["error"]["request_id"] == "abc123"
 
@@ -43,19 +43,22 @@ def test_health_reports_database_down(client):
 
 
 def test_database_errors_become_503_with_error_shape(client):
-    r = client.get("/api/v1/exceptions")
+    r = client.get("/api/cases")
     assert r.status_code == 503
     assert r.json()["error"]["code"] == "DB_UNAVAILABLE"
 
 
-def test_missing_query_param_is_a_422_in_the_error_shape(client):
-    r = client.get("/api/v1/policies/search")  # q is required
-    assert r.status_code == 422
-    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
-
-
 def test_metrics_endpoint(client):
-    client.get("/api/v1/nope")
+    client.get("/api/nope")
     r = client.get("/metrics")
     assert r.status_code == 200
     assert "http_requests_total" in r.text
+
+
+def test_missing_database_url_is_a_clear_503(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with TestClient(create_app()) as c:
+        r = c.get("/api/cases")
+        assert r.status_code == 503
+        assert r.json()["error"]["code"] == "DB_NOT_CONFIGURED"
+        assert c.get("/health").status_code == 503

@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
             init_schema(conn)
         log.info("database schema ready")
     except Exception as e:  # the app still starts; /health reports the DB as down
-        log.warning("could not initialise the database schema: %s", e)
+        log.warning("could not initialise the database schema: %s", type(e).__name__)
     yield
 
 

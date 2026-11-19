@@ -128,6 +128,18 @@ def latest_proposal(conn: psycopg.Connection, exception_id: str) -> Proposal | N
     return Proposal.model_validate(row["doc"]) if row else None
 
 
+def latest_proposals(conn: psycopg.Connection, exception_ids: list[str]) -> dict[str, Proposal]:
+    """Latest proposal per exception, in one query (for the case list)."""
+    if not exception_ids:
+        return {}
+    rows = conn.execute(
+        "SELECT DISTINCT ON (exception_id) exception_id, doc FROM proposals"
+        " WHERE exception_id = ANY(%s) ORDER BY exception_id, created_at DESC",
+        (exception_ids,),
+    ).fetchall()
+    return {r["exception_id"]: Proposal.model_validate(r["doc"]) for r in rows}
+
+
 def proposal_ids_for(conn: psycopg.Connection, exception_id: str) -> list[str]:
     rows = conn.execute(
         "SELECT id FROM proposals WHERE exception_id = %s", (exception_id,)
@@ -192,5 +204,7 @@ def list_audit(
 
 
 def clear_all(conn: psycopg.Connection) -> None:
-    """Wipe all app data (seed/demo only). Policy chunks are not touched."""
+    """Wipe all app data (dev/demo seed only). Policy chunks are not touched.
+    TRUNCATE is a deliberate reset of the whole demo database; the append-only trigger
+    still blocks any UPDATE or DELETE of single audit rows."""
     conn.execute("TRUNCATE audit_events, decisions, proposals, exceptions, timecards")

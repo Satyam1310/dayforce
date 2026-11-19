@@ -11,6 +11,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.db.connection import DatabaseNotConfigured
+
 log = logging.getLogger("app.errors")
 
 
@@ -52,9 +54,14 @@ def install_error_handlers(app: FastAPI) -> None:
         message = f"{where}: {first.get('msg', 'invalid request')}" if where else "invalid request"
         return error_response(request, 422, "VALIDATION_ERROR", message)
 
+    @app.exception_handler(DatabaseNotConfigured)
+    async def _db_not_configured(request: Request, exc: DatabaseNotConfigured) -> JSONResponse:
+        log.error("DATABASE_URL is not set")
+        return error_response(request, 503, "DB_NOT_CONFIGURED", "The database is not configured.")
+
     @app.exception_handler(psycopg.OperationalError)
     async def _db_down(request: Request, exc: psycopg.OperationalError) -> JSONResponse:
-        log.error("database unavailable: %s", exc)
+        log.error("database unavailable: %s", type(exc).__name__)  # no DSN or secrets in logs
         return error_response(request, 503, "DB_UNAVAILABLE", "The database is not reachable.")
 
     @app.exception_handler(Exception)

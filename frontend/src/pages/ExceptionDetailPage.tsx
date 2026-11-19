@@ -176,9 +176,9 @@ function ExceptionDetailView({ id }: { id: string }) {
               <>
                 <h3>Your decision</h3>
                 <DecisionForm
-                  proposalId={proposal.id}
+                  caseId={exception.id}
                   onDecided={(d) => {
-                    setFlash(d.decision === 'APPROVE' ? 'Fix approved and applied.' : 'Fix rejected.')
+                    setFlash(d === 'APPROVE' ? 'Fix approved and applied.' : 'Fix rejected.')
                     reload()
                   }}
                 />
