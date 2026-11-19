@@ -6,7 +6,7 @@
     POST /api/cases/{id}/approve    manager approves the pending proposal (applies the fix)
     POST /api/cases/{id}/reject     manager rejects it (nothing changes on the timecard)
     GET  /api/audit                 audit trail, optional ?entity_id=
-    POST /api/dev/seed              demo only: reset and load the starting data
+    POST /api/dev/seed              demo only, needs ENABLE_DEV_SEED=true: reset + load data
 
 A case id is the exception id. Every model in a response comes from app/contracts/models.py
 unchanged; CaseListItem and CaseDetail only group them.
@@ -14,6 +14,7 @@ unchanged; CaseListItem and CaseDetail only group them.
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
@@ -192,9 +193,7 @@ def propose(conn: Conn, case_id: str) -> Proposal:
 # ---- manager decision --------------------------------------------------------------------
 
 
-def _pending_proposal(
-    conn: psycopg.Connection, case_id: str
-) -> tuple[DetectedException, Proposal]:
+def _pending_proposal(conn: psycopg.Connection, case_id: str) -> tuple[DetectedException, Proposal]:
     """The case (row-locked, so concurrent decisions queue up) and its PENDING proposal."""
     exc = _get_case(conn, case_id, lock=True)
     proposal = repo.latest_proposal(conn, exc.id)
@@ -254,12 +253,21 @@ def approve(conn: Conn, case_id: str, body: ApproveRequest) -> CaseDetail:
         conn,
         [
             _audit(
-                body.manager_id, "DECISION_APPROVED", "proposal", proposal.id,
-                decision_id=decision.id, exception_id=exc.id, comment=comment,
+                body.manager_id,
+                "DECISION_APPROVED",
+                "proposal",
+                proposal.id,
+                decision_id=decision.id,
+                exception_id=exc.id,
+                comment=comment,
             ),
             _audit(
-                "system", "TIMECARD_UPDATED", "timecard", tc.id,
-                exception_id=exc.id, action=proposal.fix.action.value,
+                "system",
+                "TIMECARD_UPDATED",
+                "timecard",
+                tc.id,
+                exception_id=exc.id,
+                action=proposal.fix.action.value,
                 changes=[c.model_dump(mode="json") for c in proposal.fix.changes],
             ),
         ],
@@ -282,8 +290,13 @@ def reject(conn: Conn, case_id: str, body: RejectRequest) -> CaseDetail:
         conn,
         [
             _audit(
-                body.manager_id, "DECISION_REJECTED", "proposal", proposal.id,
-                decision_id=decision.id, exception_id=exc.id, comment=comment,
+                body.manager_id,
+                "DECISION_REJECTED",
+                "proposal",
+                proposal.id,
+                decision_id=decision.id,
+                exception_id=exc.id,
+                comment=comment,
             )
         ],
     )
@@ -293,12 +306,25 @@ def reject(conn: Conn, case_id: str, body: RejectRequest) -> CaseDetail:
 # ---- demo --------------------------------------------------------------------------------
 
 
-@router.post("/dev/seed", response_model=SeedResult, tags=["demo"])
+def require_dev_seed() -> None:
+    """The seed endpoint wipes all data, so it only exists when ENABLE_DEV_SEED=true.
+    Off by default: a deployed API answers 404, as if the endpoint were not there.
+    Runs before the database dependency, so nothing is touched when it is off."""
+    if os.environ.get("ENABLE_DEV_SEED", "").strip().lower() != "true":
+        raise ApiError(404, "NOT_FOUND", "Not found.")
+
+
+@router.post(
+    "/dev/seed",
+    response_model=SeedResult,
+    tags=["demo"],
+    dependencies=[Depends(require_dev_seed)],
+)
 def seed(
     conn: Conn,
     with_history: Annotated[
         bool, Query(description="true: past proposals/decisions too; false: every case OPEN")
     ] = True,
 ) -> SeedResult:
-    """Demo/dev only: reset the app tables and load the starting data."""
+    """Demo/dev only (ENABLE_DEV_SEED=true): reset the app tables, load the starting data."""
     return SeedResult(**load_seed(conn, with_history=with_history))

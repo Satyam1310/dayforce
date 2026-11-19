@@ -212,7 +212,7 @@ paths:
       tags:
       - demo
       summary: Seed
-      description: 'Demo/dev only: reset the app tables and load the starting data.'
+      description: 'Demo/dev only (ENABLE_DEV_SEED=true): reset the app tables, load the starting data.'
       operationId: seed_api_dev_seed_post
       parameters:
       - name: with_history
