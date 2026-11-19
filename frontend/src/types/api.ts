@@ -31,11 +31,7 @@ export interface Timecard {
   notes: string | null // UNTRUSTED text: always shown as plain text
 }
 
-export type ExceptionType =
-  | 'MISSED_PUNCH'
-  | 'OVERTIME_RISK'
-  | 'SCHEDULE_CONFLICT'
-  | 'POLICY_BREACH'
+export type ExceptionType = 'MISSED_PUNCH' | 'OVERTIME_RISK' | 'SCHEDULE_CONFLICT' | 'POLICY_BREACH'
 
 export const EXCEPTION_TYPES: ExceptionType[] = [
   'MISSED_PUNCH',
@@ -47,12 +43,7 @@ export const EXCEPTION_TYPES: ExceptionType[] = [
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH'
 
 export type FixAction =
-  | 'ADD_PUNCH'
-  | 'EDIT_PUNCH'
-  | 'DEDUCT_BREAK'
-  | 'REASSIGN_SHIFT'
-  | 'FLAG_FOR_MANAGER'
-  | 'NO_CHANGE'
+  'ADD_PUNCH' | 'EDIT_PUNCH' | 'DEDUCT_BREAK' | 'REASSIGN_SHIFT' | 'FLAG_FOR_MANAGER' | 'NO_CHANGE'
 
 export interface FieldChange {
   target_id: string
@@ -68,12 +59,7 @@ export interface Fix {
 
 export type ExceptionStatus = 'OPEN' | 'PROPOSED' | 'ESCALATED' | 'RESOLVED'
 
-export const EXCEPTION_STATUSES: ExceptionStatus[] = [
-  'OPEN',
-  'PROPOSED',
-  'ESCALATED',
-  'RESOLVED',
-]
+export const EXCEPTION_STATUSES: ExceptionStatus[] = ['OPEN', 'PROPOSED', 'ESCALATED', 'RESOLVED']
 
 export interface DetectedException {
   id: string
@@ -107,11 +93,7 @@ export interface ValidationResult {
 
 export type ProposalSource = 'LLM' | 'RULES_FALLBACK'
 
-export type ProposalStatus =
-  | 'PENDING_REVIEW'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'ESCALATED'
+export type ProposalStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'ESCALATED'
 
 export interface Proposal {
   id: string
@@ -152,13 +134,19 @@ export interface AuditEvent {
 
 // GET /exceptions/{id} returns "one exception with its timecard, proposal and
 // validation" (CLAUDE.md section 9). The exact JSON shape is not fixed yet;
-// this is our assumption. Harsh's draft in docs/frontend-mock/types.ts
-// (CaseDetail) has the same fields plus audit_events. Confirm with Raman.
+// GET /api/cases/{id} returns CaseDetail (docs/frontend-mock/types.ts, backend/API.md).
 export interface ExceptionDetail {
   exception: DetectedException
   timecard: Timecard
   proposal: Proposal | null
   decision?: Decision | null // the manager's decision, once there is one
+  audit_events?: AuditEvent[]
+}
+
+// GET /api/cases returns CaseListItem[]
+export interface CaseListItem {
+  exception: DetectedException
+  proposal?: Proposal | null
 }
 
 // Body for POST /proposals/{id}/decision

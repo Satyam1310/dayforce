@@ -1,6 +1,6 @@
-// Real API client: plain fetch against the FastAPI backend (CLAUDE.md section 9).
+// Real API client: plain fetch against the FastAPI backend (endpoints: backend/API.md).
 import { API_BASE_URL } from '../config'
-import type { ApiErrorBody } from '../types/api'
+import type { ApiErrorBody, CaseListItem } from '../types/api'
 import { ApiError, type Api } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -39,15 +39,17 @@ function query(params: Record<string, string | undefined>): string {
   return s ? `?${s}` : ''
 }
 
+const casePath = (id: string) => `/cases/${encodeURIComponent(id)}`
+
 export const httpApi: Api = {
-  listExceptions: (f) => request(`/exceptions${query({ status: f.status, type: f.type })}`),
-  getExceptionDetail: (id) => request(`/exceptions/${encodeURIComponent(id)}`),
-  proposeFix: (exceptionId) =>
-    request(`/exceptions/${encodeURIComponent(exceptionId)}/propose`, { method: 'POST' }),
-  decide: (proposalId, body) =>
-    request(`/proposals/${encodeURIComponent(proposalId)}/decision`, {
+  listCases: (f) => request<CaseListItem[]>(`/cases${query({ status: f.status, type: f.type })}`),
+  getExceptionDetail: (id) => request(casePath(id)),
+  proposeFix: (caseId) => request(`${casePath(caseId)}/propose`, { method: 'POST' }),
+  // Two endpoints: /approve and /reject. The body carries who decided and why.
+  decide: (caseId, { decision, manager_id, comment }) =>
+    request(`${casePath(caseId)}/${decision === 'APPROVE' ? 'approve' : 'reject'}`, {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify({ manager_id, comment }),
     }),
   listAudit: (entityId) => request(`/audit${query({ entity_id: entityId })}`),
 }

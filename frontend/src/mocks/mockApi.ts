@@ -34,14 +34,16 @@ function latestProposalFor(exceptionId: string): Proposal | null {
 }
 
 export const mockApi: Api = {
-  async listExceptions(filters) {
+  async listCases(filters) {
     await delay()
     return clone(
-      db.exceptions.filter(
-        (e) =>
-          (!filters.status || e.status === filters.status) &&
-          (!filters.type || e.type === filters.type),
-      ),
+      db.exceptions
+        .filter(
+          (e) =>
+            (!filters.status || e.status === filters.status) &&
+            (!filters.type || e.type === filters.type),
+        )
+        .map((exception) => ({ exception, proposal: latestProposalFor(exception.id) })),
     )
   },
 
@@ -52,7 +54,9 @@ export const mockApi: Api = {
       db.timecards.find((t) => t.id === exception.timecard_id) ??
       notFound('Timecard', exception.timecard_id)
     const proposal = latestProposalFor(id)
-    const decision = proposal ? (db.decisions.find((d) => d.proposal_id === proposal.id) ?? null) : null
+    const decision = proposal
+      ? (db.decisions.find((d) => d.proposal_id === proposal.id) ?? null)
+      : null
     return clone({ exception, timecard, proposal, decision })
   },
 
@@ -96,21 +100,43 @@ export const mockApi: Api = {
     exception.status = proposal.status === 'ESCALATED' ? 'ESCALATED' : 'PROPOSED'
     audit({
       actor: 'system',
-      event_type: proposal.status === 'ESCALATED' ? 'EXCEPTION_ESCALATED' : 'PROPOSAL_FALLBACK_USED',
+      event_type:
+        proposal.status === 'ESCALATED' ? 'EXCEPTION_ESCALATED' : 'PROPOSAL_FALLBACK_USED',
       entity_type: 'proposal',
       entity_id: proposal.id,
-      payload: { exception_id: exceptionId, source: proposal.source, confidence: proposal.confidence },
+      payload: {
+        exception_id: exceptionId,
+        source: proposal.source,
+        confidence: proposal.confidence,
+      },
     })
     return clone(proposal)
   },
 
-  async decide(proposalId, body) {
+  // Same rules as POST /api/cases/{id}/approve and /reject (backend/API.md).
+  async decide(caseId, body) {
     await delay()
-    const proposal = db.proposals.find((p) => p.id === proposalId) ?? notFound('Proposal', proposalId)
-    if (proposal.status !== 'PENDING_REVIEW') {
-      throw new ApiError(409, 'PROPOSAL_NOT_PENDING', `Proposal is already ${proposal.status}.`, `mock-${newId()}`)
+    const exception = db.exceptions.find((e) => e.id === caseId) ?? notFound('Case', caseId)
+    const proposal = latestProposalFor(caseId)
+    const fail = (code: string, message: string): never => {
+      throw new ApiError(409, code, message, `mock-${newId()}`)
     }
-    const exception = db.exceptions.find((e) => e.id === proposal.exception_id)
+    if (exception.status === 'ESCALATED' || proposal?.status === 'ESCALATED') {
+      fail('CASE_ESCALATED', 'This case is escalated: there is nothing to approve.')
+    }
+    if (!proposal) return fail('NO_PROPOSAL', 'This case has no proposal yet.')
+    if (proposal.status !== 'PENDING_REVIEW') {
+      fail('ALREADY_DECIDED', `The proposal for this case is already ${proposal.status}.`)
+    }
+    if (body.decision === 'REJECT' && !body.comment?.trim()) {
+      throw new ApiError(
+        422,
+        'COMMENT_REQUIRED',
+        'A comment is required to reject.',
+        `mock-${newId()}`,
+      )
+    }
+    const proposalId = proposal.id
 
     const decision: Decision = {
       id: newId(),
@@ -131,15 +157,29 @@ export const mockApi: Api = {
       event_type: approved ? 'DECISION_APPROVED' : 'DECISION_REJECTED',
       entity_type: 'proposal',
       entity_id: proposalId,
-      payload: { decision_id: decision.id, exception_id: proposal.exception_id, comment: body.comment },
+      payload: {
+        decision_id: decision.id,
+        exception_id: proposal.exception_id,
+        comment: body.comment,
+      },
     })
 
     // Only an approval changes the timecard (the real backend does this in one DB transaction).
     if (approved && exception) {
       const timecard = db.timecards.find((t) => t.id === exception.timecard_id)
       for (const change of proposal.fix.changes) {
-        if (timecard && proposal.fix.action === 'ADD_PUNCH' && change.field === 'punch.OUT' && change.new) {
-          timecard.punches.push({ id: newId(), employee_id: timecard.employee_id, type: 'OUT', timestamp: change.new })
+        if (
+          timecard &&
+          proposal.fix.action === 'ADD_PUNCH' &&
+          change.field === 'punch.OUT' &&
+          change.new
+        ) {
+          timecard.punches.push({
+            id: newId(),
+            employee_id: timecard.employee_id,
+            type: 'OUT',
+            timestamp: change.new,
+          })
         }
       }
       audit({
@@ -147,10 +187,14 @@ export const mockApi: Api = {
         event_type: 'TIMECARD_UPDATED',
         entity_type: 'timecard',
         entity_id: exception.timecard_id,
-        payload: { exception_id: exception.id, action: proposal.fix.action, changes: proposal.fix.changes.length },
+        payload: {
+          exception_id: exception.id,
+          action: proposal.fix.action,
+          changes: proposal.fix.changes.length,
+        },
       })
     }
-    return clone(decision)
+    return mockApi.getExceptionDetail(caseId)
   },
 
   async listAudit(entityId) {

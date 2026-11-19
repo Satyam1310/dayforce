@@ -1,8 +1,9 @@
 // The proposed fix as a before / after table.
-import { formatValue, humanize } from '../lib/format'
-import type { Fix } from '../types/api'
+import { describeValue, fieldLabel } from '../lib/describe'
+import { humanize } from '../lib/format'
+import type { Fix, Timecard } from '../types/api'
 
-export function FixDiff({ fix }: { fix: Fix }) {
+export function FixDiff({ fix, timecard }: { fix: Fix; timecard?: Timecard }) {
   return (
     <div className="fix">
       <div className="fix-action">
@@ -22,11 +23,9 @@ export function FixDiff({ fix }: { fix: Fix }) {
           <tbody>
             {fix.changes.map((c, i) => (
               <tr key={`${c.target_id}-${c.field}-${i}`}>
-                <td>
-                  <code>{c.field}</code>
-                </td>
-                <td className="diff-old">{formatValue(c.old)}</td>
-                <td className="diff-new">{formatValue(c.new)}</td>
+                <td title={c.field}>{fieldLabel(c.field)}</td>
+                <td className="diff-old">{describeValue(c.old, timecard)}</td>
+                <td className="diff-new">{describeValue(c.new, timecard)}</td>
               </tr>
             ))}
           </tbody>

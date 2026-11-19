@@ -1,8 +1,7 @@
 import type {
   AuditEvent,
-  Decision,
+  CaseListItem,
   DecisionRequest,
-  DetectedException,
   ExceptionDetail,
   ExceptionStatus,
   ExceptionType,
@@ -15,12 +14,15 @@ export interface ExceptionFilters {
 }
 
 /** Everything the UI needs from the backend. Implemented twice:
- *  src/api/http.ts (real FastAPI) and src/mocks/mockApi.ts (in-browser). */
+ *  src/api/http.ts (real FastAPI, backend/API.md) and src/mocks/mockApi.ts (in-browser).
+ *  A case id is the exception id. */
 export interface Api {
-  listExceptions(filters: ExceptionFilters): Promise<DetectedException[]>
+  /** Cases with their latest proposal (null when none yet). */
+  listCases(filters: ExceptionFilters): Promise<CaseListItem[]>
   getExceptionDetail(id: string): Promise<ExceptionDetail>
   proposeFix(exceptionId: string): Promise<Proposal>
-  decide(proposalId: string, body: DecisionRequest): Promise<Decision>
+  /** Approve or reject the case's pending proposal. Returns the updated case. */
+  decide(caseId: string, body: DecisionRequest): Promise<ExceptionDetail>
   listAudit(entityId?: string): Promise<AuditEvent[]>
 }
 
