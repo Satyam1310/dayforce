@@ -138,3 +138,32 @@ def test_threshold_calibration(dsn, embedder):
     assert len(rel) == 8 and len(off) == 8
     assert lo > threshold, f"relevant query scored {lo} <= threshold {threshold}"
     assert hi < threshold, f"off-topic query scored {hi} >= threshold {threshold}"
+
+
+def test_every_detector_rule_query_retrieves_its_clause_above_the_threshold(dsn, embedder):
+    """Real embeddings and a real database: the rule-specific queries (build_query) must put the
+    clause the detector cites first, and above RETRIEVAL_MIN_SCORE_PGVECTOR."""
+    from app.ai.retrieval import build_query
+    from app.ai.settings import AISettings
+    from app.domain.rules import detect_exceptions
+    from tests.golden.loader import load_cases
+
+    threshold = AISettings(retriever="pgvector").retrieval_min_score
+    r = PgVectorRetriever(dsn, embedder, min_score=0.0)
+    seen = {}
+    for case in load_cases():
+        for exc in detect_exceptions(case.timecards):
+            seen.setdefault(exc.evidence["rule"], exc)
+    print(f"\nthreshold = {threshold}")
+    low = []
+    for rule, exc in sorted(seen.items()):
+        hits = r.retrieve(build_query(exc), k=3)
+        wanted = exc.policy_refs[0]
+        score = next((h.score for h in hits if h.clause_id == wanted), 0.0)
+        print(
+            f"  {rule:20} wants {wanted}: top={hits[0].clause_id} {hits[0].score:.4f}"
+            f"  wanted={score:.4f}"
+        )
+        if hits[0].clause_id != wanted or score < threshold:
+            low.append((rule, wanted, hits[0].clause_id, score))
+    assert not low, low

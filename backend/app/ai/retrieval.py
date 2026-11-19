@@ -37,8 +37,26 @@ class Retriever(Protocol):
     def retrieve(self, query: str, k: int = 3) -> list[PolicyCitation]: ...
 
 
+# A more specific query for each rule the detectors raise. The type query alone is too broad:
+# for daily overtime it ranks the weekly clause (POL-TA-04) first and leaves the clause that
+# actually applies (POL-TA-03) below the minimum score, so a correct citation was rejected.
+# The wording follows the policy text so keyword and embedding search both find the clause.
+_QUERY_BY_RULE = {
+    "DAILY_OT": "daily overtime: hours beyond 8 per day are overtime",
+    "DAILY_MAX": "a day over 12 hours is a policy breach and needs manager review, daily maximum",
+    "MEAL_BREAK": "meal break: shifts longer than 6 hours need an unpaid break of at least "
+    "30 minutes, deduct 30 minutes",
+    "MIN_REST": "minimum rest: at least 10 hours between the end of one shift and the start "
+    "of the next, policy breach",
+}
+
+
 def build_query(exc: DetectedException) -> str:
-    return _QUERY_BY_TYPE[exc.type]
+    """The search text for an exception: the rule-specific query when the detector named the
+    rule, otherwise the broader query for its type (older fixtures have no rule)."""
+    evidence = getattr(exc, "evidence", None)
+    rule = evidence.get("rule") if isinstance(evidence, dict) else None
+    return _QUERY_BY_RULE.get(rule) or _QUERY_BY_TYPE[exc.type]
 
 
 def _tokens(text: str) -> set[str]:
